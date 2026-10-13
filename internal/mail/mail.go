@@ -40,9 +40,9 @@ type Message struct {
 
 // Folders are the IDs the pipeline needs after bootstrap.
 type Folders struct {
-	InboxID     string
-	FolderID    string // parent "Daakiya"
-	SubfolderID string // "Daakiya/Cold Outreach"
+	InboxID  string
+	FolderID string            // parent "Daakiya"
+	Sub      map[string]string // subfolder name -> id
 }
 
 // Delta is the result of one delta sync.
@@ -55,8 +55,8 @@ type Delta struct {
 type Mailbox interface {
 	// WhoAmI returns the signed-in user's principal name and display name.
 	WhoAmI(ctx context.Context) (upn, name string, err error)
-	// Bootstrap ensures the folder, subfolder and categories exist and returns their IDs.
-	Bootstrap(ctx context.Context, folder, subfolder string, categories []string) (Folders, error)
+	// Bootstrap ensures the parent folder, each subfolder and the categories exist.
+	Bootstrap(ctx context.Context, folder string, subfolders []string, categories []string) (Folders, error)
 	// InitialCursor returns a cursor representing "now" without listing messages.
 	InitialCursor(ctx context.Context) (string, error)
 	// NewMessages lists Inbox changes since cursor.

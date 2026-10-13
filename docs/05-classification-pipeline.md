@@ -8,12 +8,13 @@ change actions in config but cannot add categories without a prompt version bump
 | Category | Definition | v1 default action |
 |----------|------------|-------------------|
 | `cold_outreach` | Unsolicited message from someone the owner has no relationship with, whose purpose is to sell, pitch, recruit, book a meeting, request a link or guest post, or otherwise start a commercial conversation. Includes follow-ups and "breaking up" emails in such a sequence. Includes LinkedIn-style "I came across your profile" mail regardless of whether it came via LinkedIn. | Move to `Daakiya/Cold Outreach`, set category `Daakiya` |
-| `marketing` | Bulk commercial mail from a sender the owner may have opted into: newsletters, product updates, promotions, webinar invites. Usually has `List-Unsubscribe`. | None in v1 (recorded only). Candidate for a second folder later. |
+| `marketing` | Bulk commercial mail from a sender the owner may have opted into: newsletters, product updates, promotions, webinar invites. Usually has `List-Unsubscribe`. | None by default. Set `folders.marketing = "Marketing"` in config to move it. |
 | `notification` | Automated system mail: receipts, password resets, calendar, CI, ticketing, SaaS alerts, LinkedIn's own notifications. | None |
 | `correspondence` | A human writing to the owner about something they are both involved in, or any mail from a known correspondent, or any reply in a thread the owner participated in. | None |
 | `unknown` | The pipeline could not decide with enough confidence, or the LLM output was invalid. | None |
 
-Only `cold_outreach` triggers an action in v1. Getting one category right is the whole
+Actions are configured per category in `[folders]`; only `cold_outreach` has a folder by
+default. Getting one category right is the whole
 product; the others exist so the model has somewhere to put mail that is not cold outreach,
 which improves precision on the one that matters.
 
@@ -74,16 +75,21 @@ cost, and they are entirely the owner's data.
 2. **In-thread reply.** `In-Reply-To` or `References` matches a message the owner sent, or
    `conversation_id` matches a conversation with a message from the owner. Result:
    `correspondence`.
-3. **Allowlist.** Sender address or registrable domain is in `allow_*`. Seeded during
+3. **Routes.** Owner-written sender rules in config (`[[routes]]` with `match` and
+   `folder`). `match` is an address, or a domain which also matches its subdomains. A match
+   is moved to the named subfolder in every mode, including shadow, because the owner
+   wrote the rule and there is nothing to measure. Typical use: everything from
+   `linkedin.com` to a `LinkedIn` folder. Result: `notification`, rule `route`.
+4. **Allowlist.** Sender address or registrable domain is in `allow_*`. Seeded during
    `init` with the owner's own domains; grown by corrections. Result: `correspondence`.
-4. **Denylist.** Sender address or domain in `deny_*`. Grown only by explicit owner action
+5. **Denylist.** Sender address or domain in `deny_*`. Grown only by explicit owner action
    (`daakiya deny`) or by repeated confirmed `cold_outreach` from the same domain (3 or
    more decisions with no correction, configurable). Result: `cold_outreach`.
-5. **Automated mail.** `Auto-Submitted` present, or `Precedence: bulk|list|junk`, or sender
+6. **Automated mail.** `Auto-Submitted` present, or `Precedence: bulk|list|junk`, or sender
    local part in `{noreply, no-reply, donotreply, notifications, mailer-daemon, ...}` and
    no `In-Reply-To`. Result: `notification`. This keeps receipts and alerts away from the
    LLM entirely.
-6. Otherwise: ambiguous, go to the LLM.
+7. Otherwise: ambiguous, go to the LLM.
 
 Expected effect: on a typical inbox, 50 to 70 percent of mail resolves at this stage.
 The eval command reports the split so the owner can see it.
@@ -146,11 +152,12 @@ cached on providers that support prompt caching.
 ### Stage 4: Decide
 
 ```
-if category == cold_outreach
+folder = folders[category]              (config; only cold_outreach has one by default)
+if folder is set
    and confidence >= threshold            (default 0.85)
-   and relationship_evidence != strong
-   and sender not in correspondent list  (re-check; lists may have changed mid-run)
-then action = move+tag
+   and sender not in correspondent list
+   and not (category == cold_outreach and relationship_evidence == strong)
+then action = move to folder + tag
 else action = none, category recorded as returned
 ```
 

@@ -17,7 +17,17 @@ type Verdict struct {
 	Confidence float64
 	Reason     string
 	Rule       string
+	Folder     string // set by route rules: where the message goes
 }
+
+// Route is an owner-written sender rule.
+type Route struct {
+	Match  string
+	Folder string
+}
+
+// RuleRoute is the Rule name for route verdicts; actions treat it specially.
+const RuleRoute = "route"
 
 var automatedLocalParts = map[string]bool{
 	"noreply": true, "no-reply": true, "no_reply": true, "donotreply": true, "do-not-reply": true, "do_not_reply": true,
@@ -30,8 +40,28 @@ type Lists interface {
 	InList(ctx context.Context, kind, value string) (bool, error)
 }
 
+// MatchRoute reports whether a route matches a sender address. A route with an
+// "@" matches that address exactly; otherwise it matches the domain and any
+// subdomain of it.
+func MatchRoute(r Route, addr string) bool {
+	m := strings.ToLower(strings.TrimSpace(r.Match))
+	addr = strings.ToLower(addr)
+	if m == "" || addr == "" {
+		return false
+	}
+	if strings.Contains(m, "@") {
+		return addr == m
+	}
+	i := strings.LastIndex(addr, "@")
+	if i < 0 {
+		return false
+	}
+	host := addr[i+1:]
+	return host == m || strings.HasSuffix(host, "."+m)
+}
+
 // Evaluate applies the rules in order; first match wins.
-func Evaluate(ctx context.Context, lists Lists, n classify.Normalized, conversationID string) (Verdict, error) {
+func Evaluate(ctx context.Context, lists Lists, n classify.Normalized, conversationID string, routes []Route) (Verdict, error) {
 	in := func(kind, v string) (bool, error) {
 		if v == "" {
 			return false, nil
@@ -47,21 +77,29 @@ func Evaluate(ctx context.Context, lists Lists, n classify.Normalized, conversat
 	if ok, err := in(store.ListSentConversation, conversationID); err != nil || ok {
 		return verdict(ok, llm.Correspondence, 1.0, "reply in a thread you took part in", "in_thread"), err
 	}
-	// 3. Allowlist.
+	// 3. Owner-written sender routes.
+	for _, r := range routes {
+		if MatchRoute(r, n.FromAddr) {
+			v := verdict(true, llm.Notification, 1.0, "sender rule: "+r.Match+" -> "+r.Folder, RuleRoute)
+			v.Folder = r.Folder
+			return v, nil
+		}
+	}
+	// 4. Allowlist.
 	if ok, err := in(store.ListAllowAddr, n.FromAddr); err != nil || ok {
 		return verdict(ok, llm.Correspondence, 1.0, "sender address is allowlisted", "allow_addr"), err
 	}
 	if ok, err := in(store.ListAllowDomain, n.FromDomain); err != nil || ok {
 		return verdict(ok, llm.Correspondence, 1.0, "sender domain is allowlisted", "allow_domain"), err
 	}
-	// 4. Denylist.
+	// 5. Denylist.
 	if ok, err := in(store.ListDenyAddr, n.FromAddr); err != nil || ok {
 		return verdict(ok, llm.ColdOutreach, 1.0, "sender address is denylisted", "deny_addr"), err
 	}
 	if ok, err := in(store.ListDenyDomain, n.FromDomain); err != nil || ok {
 		return verdict(ok, llm.ColdOutreach, 1.0, "sender domain is denylisted", "deny_domain"), err
 	}
-	// 5. Automated mail: never worth a model call.
+	// 6. Automated mail: never worth a model call.
 	if n.Signals.AutoSubmitted || n.Signals.Bulk {
 		return verdict(true, llm.Notification, 0.9, "automated or bulk headers", "automated_headers"), nil
 	}

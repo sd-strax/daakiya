@@ -18,9 +18,10 @@ type Scanner struct {
 	Log     func(format string, args ...any)
 }
 
-// Scan looks for two things: moved messages that are no longer in the Daakiya
-// folder (false positives) and messages in the folder that Daakiya never moved
-// (false negatives the owner filed by hand).
+// Scan looks for two things: model-moved messages that are no longer in their
+// target folder (false positives) and messages in the cold outreach folder that
+// Daakiya never moved (false negatives the owner filed by hand). Route moves are
+// the owner's own rules and produce no signal.
 func (s *Scanner) Scan(ctx context.Context) (fp, fn int, err error) {
 	a := s.Applier
 	since := time.Now().Add(-30 * 24 * time.Hour)
@@ -29,8 +30,12 @@ func (s *Scanner) Scan(ctx context.Context) (fp, fn int, err error) {
 		return 0, 0, err
 	}
 	for _, d := range moved {
-		if d.ActionAt == nil {
-			continue // shadow decision, never moved
+		if d.ActionAt == nil || d.Rule == actions.RuleRoute {
+			continue // shadow decision never moved, or an owner route
+		}
+		expected := a.Folders.Sub[d.TargetFolder]
+		if expected == "" {
+			continue
 		}
 		loc, err := a.Mailbox.Locate(ctx, d.ID)
 		if errors.Is(err, mail.ErrNotFound) {
@@ -39,16 +44,21 @@ func (s *Scanner) Scan(ctx context.Context) (fp, fn int, err error) {
 		if err != nil {
 			return fp, fn, err
 		}
-		if loc != a.Folders.SubfolderID {
+		if loc != expected {
 			if err := a.RecordFalsePositive(ctx, d); err != nil {
 				return fp, fn, err
 			}
 			fp++
-			s.Log("feedback: false positive, %s moved out of the folder by owner", d.FromAddr)
+			s.Log("feedback: false positive, %s moved out of %s by owner", d.FromAddr, d.TargetFolder)
 		}
 	}
 
-	inFolder, err := a.Mailbox.ListFolder(ctx, a.Folders.SubfolderID, 500)
+	coldName := a.Cfg.Folders[llm.ColdOutreach]
+	coldID := a.Folders.Sub[coldName]
+	if coldID == "" {
+		return fp, fn, nil
+	}
+	inFolder, err := a.Mailbox.ListFolder(ctx, coldID, 500)
 	if err != nil {
 		return fp, fn, err
 	}

@@ -40,6 +40,18 @@ to compare a local model on the same reviewed decisions, `demote`, `uninstall --
 Config lives in `~/.config/daakiya/config.toml`. Secrets live in the macOS Keychain. State
 and logs live in `~/Library/Application Support/daakiya/`.
 
+Two things worth knowing about in the config:
+
+```toml
+[folders]                      # which categories get moved, and where (under the Daakiya folder)
+cold_outreach = "Cold Outreach"
+marketing = "Marketing"        # off unless you add it
+
+[[routes]]                     # your own sender rules; applied before the model, in every mode
+match = "linkedin.com"         # an address, or a domain (subdomains included)
+folder = "LinkedIn"
+```
+
 ## Bring your own key
 
 The binary ships with no model access and no Microsoft app identity. You register a

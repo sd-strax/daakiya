@@ -13,6 +13,9 @@ import (
 	"github.com/sd-strax/daakiya/internal/store"
 )
 
+// RuleRoute mirrors rules.RuleRoute without importing the rules package.
+const RuleRoute = "route"
+
 type Applier struct {
 	Mailbox mail.Mailbox
 	Store   *store.Store
@@ -20,13 +23,19 @@ type Applier struct {
 	Folders mail.Folders
 }
 
-// Apply performs the decision's action. In shadow mode it only tags.
+// Apply performs the decision's action. Model decisions only tag in shadow
+// mode; owner-written routes move in every mode because there is nothing to
+// measure about a rule the owner wrote.
 func (a *Applier) Apply(ctx context.Context, d *store.Decision) error {
 	if d.Action != store.ActionMove {
 		return nil
 	}
+	dest := a.Folders.Sub[d.TargetFolder]
+	if dest == "" {
+		return fmt.Errorf("no folder id for %q (run `daakiya run` once to bootstrap)", d.TargetFolder)
+	}
 	now := time.Now()
-	if a.Cfg.Mode == config.ModeShadow {
+	if a.Cfg.Mode == config.ModeShadow && d.Rule != RuleRoute {
 		if a.Cfg.Shadow.Tag {
 			if err := a.addCategory(ctx, d.ID, a.Cfg.Mailbox.ShadowCategory); err != nil {
 				return err
@@ -37,7 +46,7 @@ func (a *Applier) Apply(ctx context.Context, d *store.Decision) error {
 	if err := a.addCategory(ctx, d.ID, a.Cfg.Mailbox.Category); err != nil {
 		return err
 	}
-	newID, err := a.Mailbox.Move(ctx, d.ID, a.Folders.SubfolderID)
+	newID, err := a.Mailbox.Move(ctx, d.ID, dest)
 	if err != nil {
 		return err
 	}
@@ -99,6 +108,10 @@ func (a *Applier) Undo(ctx context.Context, d store.Decision) error {
 	}
 	if err == nil {
 		_ = a.removeCategories(ctx, d.ID, a.Cfg.Mailbox.Category, a.Cfg.Mailbox.ShadowCategory)
+	}
+	if d.Rule == RuleRoute {
+		// The owner overrode their own rule for one message; nothing to learn.
+		return a.Store.MarkCorrected(ctx, d.ID, "fp")
 	}
 	return a.RecordFalsePositive(ctx, d)
 }

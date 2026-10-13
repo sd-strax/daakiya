@@ -33,15 +33,32 @@ type Runner struct {
 
 var ErrBudget = errors.New("daily LLM call budget exhausted")
 
-// LoadFolders reads cached folder IDs or bootstraps them.
+// LoadFolders reads cached folder IDs or bootstraps them. Any subfolder the
+// config names that has no cached id, or whose cached id no longer resolves,
+// triggers a bootstrap, so adding a route or folder to the config is enough.
 func (r *Runner) LoadFolders(ctx context.Context) error {
-	f := mail.Folders{}
+	f := mail.Folders{Sub: map[string]string{}}
 	f.InboxID, _ = r.Store.GetState(ctx, store.KeyInboxID)
 	f.FolderID, _ = r.Store.GetState(ctx, store.KeyFolderID)
-	f.SubfolderID, _ = r.Store.GetState(ctx, store.KeySubfolderID)
-	if f.InboxID != "" && f.FolderID != "" && f.SubfolderID != "" {
-		// Verify the subfolder still exists; recreate if the owner deleted it.
-		if _, err := r.Mailbox.ListFolder(ctx, f.SubfolderID, 1); err == nil {
+	complete := f.InboxID != "" && f.FolderID != ""
+	for _, name := range r.Cfg.AllFolders() {
+		id, _ := r.Store.GetState(ctx, store.FolderKey(name))
+		if id == "" {
+			complete = false
+			break
+		}
+		f.Sub[name] = id
+	}
+	if complete {
+		// Spot-check one subfolder still exists; recreate if the owner deleted it.
+		ok := true
+		for _, id := range f.Sub {
+			if _, err := r.Mailbox.ListFolder(ctx, id, 1); err != nil {
+				ok = false
+			}
+			break
+		}
+		if ok {
 			r.Folders = f
 			return nil
 		}
@@ -52,15 +69,25 @@ func (r *Runner) LoadFolders(ctx context.Context) error {
 
 func (r *Runner) Bootstrap(ctx context.Context) error {
 	cats := []string{r.Cfg.Mailbox.Category, r.Cfg.Mailbox.ShadowCategory}
-	f, err := r.Mailbox.Bootstrap(ctx, r.Cfg.Mailbox.FolderName, r.Cfg.Mailbox.SubfolderName, cats)
+	f, err := r.Mailbox.Bootstrap(ctx, r.Cfg.Mailbox.FolderName, r.Cfg.AllFolders(), cats)
 	if err != nil {
 		return err
 	}
 	r.Folders = f
 	_ = r.Store.SetState(ctx, store.KeyInboxID, f.InboxID)
 	_ = r.Store.SetState(ctx, store.KeyFolderID, f.FolderID)
-	_ = r.Store.SetState(ctx, store.KeySubfolderID, f.SubfolderID)
+	for name, id := range f.Sub {
+		_ = r.Store.SetState(ctx, store.FolderKey(name), id)
+	}
 	return nil
+}
+
+func (r *Runner) routes() []rules.Route {
+	out := make([]rules.Route, 0, len(r.Cfg.Routes))
+	for _, rt := range r.Cfg.Routes {
+		out = append(out, rules.Route{Match: rt.Match, Folder: rt.Folder})
+	}
+	return out
 }
 
 // Run performs one scheduled pass.
@@ -227,14 +254,17 @@ func (r *Runner) classifyOne(ctx context.Context, m mail.Message) (store.Decisio
 		d.Attempts = prev.Attempts
 	}
 
-	v, err := rules.Evaluate(ctx, r.Store, n, full.ConversationID)
+	v, err := rules.Evaluate(ctx, r.Store, n, full.ConversationID, r.routes())
 	if err != nil {
 		return d, err
 	}
 	if v.Matched {
-		d.Category, d.Confidence, d.Reason, d.Stage, d.Relationship = v.Category, v.Confidence, v.Reason, "rule", llm.RelNone
-		if v.Category == llm.ColdOutreach {
-			d.Action = store.ActionMove
+		d.Category, d.Confidence, d.Reason, d.Stage, d.Relationship, d.Rule = v.Category, v.Confidence, v.Reason, "rule", llm.RelNone, v.Rule
+		switch {
+		case v.Folder != "":
+			d.Action, d.TargetFolder = store.ActionMove, v.Folder
+		case v.Category == llm.ColdOutreach && r.Cfg.Folders[llm.ColdOutreach] != "":
+			d.Action, d.TargetFolder = store.ActionMove, r.Cfg.Folders[llm.ColdOutreach]
 		}
 		return d, nil
 	}
@@ -265,7 +295,7 @@ func (r *Runner) classifyOne(ctx context.Context, m mail.Message) (store.Decisio
 		return d, err
 	}
 	d.Category, d.Confidence, d.Reason, d.Relationship = res.Category, res.Confidence, res.Reason, res.Relationship
-	d.Action = classify.Decide(res, r.Cfg.LLM.Threshold, known)
+	d.Action, d.TargetFolder = classify.Decide(res, r.Cfg.LLM.Threshold, known, r.Cfg.Folders)
 	return d, nil
 }
 

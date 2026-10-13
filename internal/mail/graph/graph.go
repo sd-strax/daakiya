@@ -280,8 +280,8 @@ func (c *Client) ensureFolder(ctx context.Context, listPath, name string) (strin
 	return created.ID, nil
 }
 
-func (c *Client) Bootstrap(ctx context.Context, folderName, subfolderName string, categories []string) (mail.Folders, error) {
-	var f mail.Folders
+func (c *Client) Bootstrap(ctx context.Context, folderName string, subfolders []string, categories []string) (mail.Folders, error) {
+	f := mail.Folders{Sub: map[string]string{}}
 	var inbox folder
 	if err := c.do(ctx, http.MethodGet, "/me/mailFolders/inbox?$select=id", nil, &inbox); err != nil {
 		return f, err
@@ -291,8 +291,12 @@ func (c *Client) Bootstrap(ctx context.Context, folderName, subfolderName string
 	if f.FolderID, err = c.ensureFolder(ctx, "/me/mailFolders", folderName); err != nil {
 		return f, err
 	}
-	if f.SubfolderID, err = c.ensureFolder(ctx, "/me/mailFolders/"+f.FolderID+"/childFolders", subfolderName); err != nil {
-		return f, err
+	for _, name := range subfolders {
+		id, err := c.ensureFolder(ctx, "/me/mailFolders/"+f.FolderID+"/childFolders", name)
+		if err != nil {
+			return f, err
+		}
+		f.Sub[name] = id
 	}
 	// Master categories give the tag a colour in Outlook. Needs MailboxSettings.ReadWrite.
 	var cats struct {

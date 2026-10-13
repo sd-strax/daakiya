@@ -36,20 +36,48 @@ func TestEvaluateOrder(t *testing.T) {
 		{"bulk", classify.Normalized{FromAddr: "news@z.com", FromDomain: "z.com", FromLocal: "news", Signals: llm.Signals{Bulk: true}}, "", llm.Notification, "automated_headers"},
 	}
 	for _, c := range cases {
-		v, err := Evaluate(ctx, lists, c.n, c.conv)
+		v, err := Evaluate(ctx, lists, c.n, c.conv, nil)
 		if err != nil || !v.Matched || v.Category != c.cat || v.Rule != c.rule {
 			t.Errorf("%s: got %+v (%v), want %s/%s", c.name, v, err, c.cat, c.rule)
 		}
 	}
 	// Allowlisted sender that is also denylisted: allow wins (earlier rule).
 	lists[store.ListAllowAddr+":a@spammy.io"] = true
-	v, _ := Evaluate(ctx, lists, classify.Normalized{FromAddr: "a@spammy.io", FromDomain: "spammy.io"}, "")
+	v, _ := Evaluate(ctx, lists, classify.Normalized{FromAddr: "a@spammy.io", FromDomain: "spammy.io"}, "", nil)
 	if v.Category != llm.Correspondence {
 		t.Errorf("allow should beat deny, got %+v", v)
 	}
 	// Ambiguous human mail reaches the model.
-	v, _ = Evaluate(ctx, lists, classify.Normalized{FromAddr: "joe@growth.io", FromDomain: "growth.io", FromLocal: "joe"}, "")
+	v, _ = Evaluate(ctx, lists, classify.Normalized{FromAddr: "joe@growth.io", FromDomain: "growth.io", FromLocal: "joe"}, "", nil)
 	if v.Matched {
 		t.Errorf("ambiguous mail should not match a rule: %+v", v)
+	}
+}
+
+func TestRoutes(t *testing.T) {
+	routes := []Route{{Match: "linkedin.com", Folder: "LinkedIn"}, {Match: "bob@partner.com", Folder: "Partners"}}
+	for addr, want := range map[string]bool{
+		"jobs-noreply@linkedin.com": true, "x@mail.linkedin.com": true, "x@notlinkedin.com": false,
+		"bob@partner.com": true, "alice@partner.com": false, "BOB@PARTNER.COM": true,
+	} {
+		got := false
+		for _, r := range routes {
+			if MatchRoute(r, addr) {
+				got = true
+			}
+		}
+		if got != want {
+			t.Errorf("%s: got %v want %v", addr, got, want)
+		}
+	}
+	// A route beats the allowlist and the automated-sender rule, but not a known correspondent.
+	lists := fakeLists{store.ListAllowDomain + ":linkedin.com": true, store.ListCorrespondent + ":friend@linkedin.com": true}
+	v, _ := Evaluate(context.Background(), lists, classify.Normalized{FromAddr: "jobs-noreply@linkedin.com", FromDomain: "linkedin.com", FromLocal: "jobs-noreply"}, "", routes)
+	if v.Rule != RuleRoute || v.Folder != "LinkedIn" || v.Category != llm.Notification {
+		t.Errorf("route verdict: %+v", v)
+	}
+	v, _ = Evaluate(context.Background(), lists, classify.Normalized{FromAddr: "friend@linkedin.com", FromDomain: "linkedin.com"}, "", routes)
+	if v.Rule != "known_correspondent" {
+		t.Errorf("known correspondent should win over route: %+v", v)
 	}
 }

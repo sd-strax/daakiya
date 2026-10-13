@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS decisions (
   reviewed_source TEXT,
   judge_label TEXT,
   judge_model TEXT,
+  rule TEXT,
+  target_folder TEXT,
   attempts INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS decisions_decided_at ON decisions(decided_at);
@@ -92,6 +94,9 @@ const (
 	KeyImmutableIDs     = "immutable_ids"
 )
 
+// FolderKey is the sync_state key holding a subfolder's id.
+func FolderKey(name string) string { return "folder:" + name }
+
 // Actions.
 const (
 	ActionNone     = "none"
@@ -133,6 +138,8 @@ type Decision struct {
 	ReviewedSource    string // owner | judge
 	JudgeLabel        string
 	JudgeModel        string
+	Rule              string // which rule decided, e.g. route, known_correspondent; empty for llm
+	TargetFolder      string // subfolder name for a move action
 	Attempts          int
 }
 
@@ -196,7 +203,7 @@ func (s *Store) migrate() error {
 		have[name] = true
 	}
 	rows.Close()
-	for _, col := range []string{"reviewed_source TEXT", "judge_label TEXT", "judge_model TEXT"} {
+	for _, col := range []string{"reviewed_source TEXT", "judge_label TEXT", "judge_model TEXT", "rule TEXT", "target_folder TEXT"} {
 		name := col[:len(col)-len(" TEXT")]
 		if !have[name] {
 			if _, err := s.db.Exec(`ALTER TABLE decisions ADD COLUMN ` + col); err != nil {
@@ -299,19 +306,19 @@ func (s *Store) ReplaceList(ctx context.Context, kind, source string, values []s
 
 const decisionCols = `id, internet_message_id, conversation_id, received_at, from_name, from_addr, from_domain, subject, excerpt, signals,
 category, confidence, reason, relationship, stage, provider, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms,
-action, action_at, mode, decided_at, corrected, corrected_at, reviewed_label, reviewed_at, reviewed_source, judge_label, judge_model, attempts`
+action, action_at, mode, decided_at, corrected, corrected_at, reviewed_label, reviewed_at, reviewed_source, judge_label, judge_model, rule, target_folder, attempts`
 
 func (s *Store) UpsertDecision(ctx context.Context, d Decision) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decisions (`+decisionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decisions (`+decisionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
  category=excluded.category, confidence=excluded.confidence, reason=excluded.reason, relationship=excluded.relationship,
  stage=excluded.stage, provider=excluded.provider, model=excluded.model, prompt_version=excluded.prompt_version,
  input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens, cost_usd=excluded.cost_usd, latency_ms=excluded.latency_ms,
  action=excluded.action, action_at=excluded.action_at, mode=excluded.mode, decided_at=excluded.decided_at, attempts=excluded.attempts,
- excerpt=excluded.excerpt, signals=excluded.signals`,
+ excerpt=excluded.excerpt, signals=excluded.signals, rule=excluded.rule, target_folder=excluded.target_folder`,
 		d.ID, d.InternetMessageID, d.ConversationID, ts(d.ReceivedAt), d.FromName, d.FromAddr, d.FromDomain, d.Subject, d.Excerpt, d.Signals,
 		d.Category, d.Confidence, d.Reason, d.Relationship, d.Stage, d.Provider, d.Model, d.PromptVersion, d.InputTokens, d.OutputTokens, d.CostUSD, d.LatencyMS,
-		d.Action, tsp(d.ActionAt), d.Mode, ts(d.DecidedAt), nullIfEmpty(d.Corrected), tsp(d.CorrectedAt), nullIfEmpty(d.ReviewedLabel), tsp(d.ReviewedAt), nullIfEmpty(d.ReviewedSource), nullIfEmpty(d.JudgeLabel), nullIfEmpty(d.JudgeModel), d.Attempts)
+		d.Action, tsp(d.ActionAt), d.Mode, ts(d.DecidedAt), nullIfEmpty(d.Corrected), tsp(d.CorrectedAt), nullIfEmpty(d.ReviewedLabel), tsp(d.ReviewedAt), nullIfEmpty(d.ReviewedSource), nullIfEmpty(d.JudgeLabel), nullIfEmpty(d.JudgeModel), nullIfEmpty(d.Rule), nullIfEmpty(d.TargetFolder), d.Attempts)
 	return err
 }
 
@@ -325,10 +332,10 @@ func nullIfEmpty(s string) any {
 func scanDecision(sc interface{ Scan(...any) error }) (Decision, error) {
 	var d Decision
 	var receivedAt, decidedAt string
-	var actionAt, correctedAt, reviewedAt, corrected, reviewedLabel, reviewedSource, judgeLabel, judgeModel sql.NullString
+	var actionAt, correctedAt, reviewedAt, corrected, reviewedLabel, reviewedSource, judgeLabel, judgeModel, rule, targetFolder sql.NullString
 	err := sc.Scan(&d.ID, &d.InternetMessageID, &d.ConversationID, &receivedAt, &d.FromName, &d.FromAddr, &d.FromDomain, &d.Subject, &d.Excerpt, &d.Signals,
 		&d.Category, &d.Confidence, &d.Reason, &d.Relationship, &d.Stage, &d.Provider, &d.Model, &d.PromptVersion, &d.InputTokens, &d.OutputTokens, &d.CostUSD, &d.LatencyMS,
-		&d.Action, &actionAt, &d.Mode, &decidedAt, &corrected, &correctedAt, &reviewedLabel, &reviewedAt, &reviewedSource, &judgeLabel, &judgeModel, &d.Attempts)
+		&d.Action, &actionAt, &d.Mode, &decidedAt, &corrected, &correctedAt, &reviewedLabel, &reviewedAt, &reviewedSource, &judgeLabel, &judgeModel, &rule, &targetFolder, &d.Attempts)
 	if err != nil {
 		return d, err
 	}
@@ -337,6 +344,7 @@ func scanDecision(sc interface{ Scan(...any) error }) (Decision, error) {
 	d.ActionAt, d.CorrectedAt, d.ReviewedAt = parseTS(actionAt), parseTS(correctedAt), parseTS(reviewedAt)
 	d.Corrected, d.ReviewedLabel = corrected.String, reviewedLabel.String
 	d.ReviewedSource, d.JudgeLabel, d.JudgeModel = reviewedSource.String, judgeLabel.String, judgeModel.String
+	d.Rule, d.TargetFolder = rule.String, targetFolder.String
 	return d, nil
 }
 
@@ -348,9 +356,10 @@ func (s *Store) GetDecision(ctx context.Context, id string) (Decision, bool, err
 	return d, err == nil, err
 }
 
-// FindDecisionByPrefix resolves a short id prefix as typed by the owner.
-func (s *Store) FindDecisionByPrefix(ctx context.Context, prefix string) (Decision, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+decisionCols+` FROM decisions WHERE id LIKE ? ORDER BY decided_at DESC LIMIT 2`, prefix+"%")
+// FindDecisionByPrefix resolves the short id the owner sees, which is the
+// last characters of the message id (Graph ids share a long common prefix).
+func (s *Store) FindDecisionByPrefix(ctx context.Context, short string) (Decision, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+decisionCols+` FROM decisions WHERE id LIKE ? OR id = ? ORDER BY decided_at DESC LIMIT 2`, "%"+short, short)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -365,11 +374,11 @@ func (s *Store) FindDecisionByPrefix(ctx context.Context, prefix string) (Decisi
 	}
 	switch len(found) {
 	case 0:
-		return Decision{}, fmt.Errorf("no decision with id starting %q", prefix)
+		return Decision{}, fmt.Errorf("no decision with id ending %q", short)
 	case 1:
 		return found[0], nil
 	default:
-		return Decision{}, fmt.Errorf("id prefix %q is ambiguous; give more characters", prefix)
+		return Decision{}, fmt.Errorf("id %q is ambiguous; give more characters", short)
 	}
 }
 

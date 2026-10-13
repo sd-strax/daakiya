@@ -29,6 +29,19 @@ type Config struct {
 	Privacy Privacy `toml:"privacy"`
 	Shadow  Shadow  `toml:"shadow"`
 	Log     Log     `toml:"log"`
+
+	// Folders maps a category to the subfolder (under the Daakiya folder) its
+	// messages are moved to. A category with no entry stays in the Inbox.
+	Folders map[string]string `toml:"folders"`
+	// Routes are owner-written sender rules: mail from a matching address or
+	// domain goes straight to the named subfolder, before any model call and
+	// regardless of mode.
+	Routes []Route `toml:"routes"`
+}
+
+type Route struct {
+	Match  string `toml:"match"`  // address, or domain (matches subdomains too)
+	Folder string `toml:"folder"` // subfolder name under the Daakiya folder
 }
 
 type Mailbox struct {
@@ -101,8 +114,28 @@ func Default() Config {
 			InputPricePerM:  0.10,
 			OutputPricePerM: 0.50,
 		},
-		Shadow: Shadow{Tag: true},
+		Shadow:  Shadow{Tag: true},
+		Folders: map[string]string{"cold_outreach": "Cold Outreach"},
 	}
+}
+
+// AllFolders lists every subfolder name the config refers to, deduplicated.
+func (c Config) AllFolders() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(n string) {
+		if n != "" && !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	for _, cat := range []string{"cold_outreach", "marketing", "notification", "correspondence"} {
+		add(c.Folders[cat])
+	}
+	for _, r := range c.Routes {
+		add(r.Folder)
+	}
+	return out
 }
 
 // Paths groups the on-disk locations. All are under the user's home.
@@ -146,6 +179,13 @@ func Load(path string) (Config, error) {
 	if _, err := toml.Decode(string(data), &cfg); err != nil {
 		return cfg, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if cfg.Folders == nil {
+		cfg.Folders = map[string]string{}
+	}
+	// Older configs named the cold outreach folder on the mailbox section.
+	if cfg.Folders["cold_outreach"] == "" && cfg.Mailbox.SubfolderName != "" {
+		cfg.Folders["cold_outreach"] = cfg.Mailbox.SubfolderName
+	}
 	return cfg, cfg.Validate()
 }
 
@@ -182,6 +222,18 @@ func (c Config) Validate() error {
 	}
 	if c.LLM.Threshold <= 0 || c.LLM.Threshold > 1 {
 		return errors.New("llm.threshold must be in (0, 1]")
+	}
+	for cat := range c.Folders {
+		switch cat {
+		case "cold_outreach", "marketing", "notification", "correspondence":
+		default:
+			return fmt.Errorf("folders: unknown category %q", cat)
+		}
+	}
+	for i, r := range c.Routes {
+		if r.Match == "" || r.Folder == "" {
+			return fmt.Errorf("routes[%d]: match and folder are required", i)
+		}
 	}
 	return nil
 }

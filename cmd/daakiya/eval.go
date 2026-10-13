@@ -155,7 +155,8 @@ func score(ev []evalRow, threshold float64) report {
 	for _, t := range []float64{0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, threshold} {
 		ts := thresholdScore{Threshold: t}
 		for _, r := range ev {
-			move := classify.Decide(llm.Result{Category: r.Category, Confidence: r.Conf, Relationship: r.Rel}, t, r.Known) == store.ActionMove
+			act, _ := classify.Decide(llm.Result{Category: r.Category, Confidence: r.Conf, Relationship: r.Rel}, t, r.Known, map[string]string{llm.ColdOutreach: "x"})
+			move := act == store.ActionMove
 			truth := r.Label == llm.ColdOutreach
 			switch {
 			case move && truth:

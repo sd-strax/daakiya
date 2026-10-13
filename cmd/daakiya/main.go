@@ -27,6 +27,7 @@ import (
 	"github.com/sd-strax/daakiya/internal/llm"
 	"github.com/sd-strax/daakiya/internal/mail"
 	"github.com/sd-strax/daakiya/internal/mail/graph"
+	"github.com/sd-strax/daakiya/internal/rules"
 	"github.com/sd-strax/daakiya/internal/runner"
 	"github.com/sd-strax/daakiya/internal/secrets"
 	"github.com/sd-strax/daakiya/internal/store"
@@ -49,11 +50,11 @@ Operation
   status               last run, counts, mode, spend
   review [--mark] [-n N] [--unreviewed] [--category C] [--sample N] [--json]
                        recent decisions; --mark asks right/wrong per row
-  undo <id-prefix>     move a message back to the Inbox and learn from it
+  undo <id>            move a message back to the Inbox and learn from it (id as shown by review)
   allow <addr|domain>  never treat this sender as cold outreach
   deny <addr|domain>   always treat this sender as cold outreach
   promote | demote     switch between live and shadow mode
-  backfill --since YYYY-MM-DD [--apply] [--redo-unknown]
+  backfill --since YYYY-MM-DD [--apply] [--redo-unknown] [--reroute]
                        classify existing Inbox mail; --apply tags (shadow) or moves (live)
   eval [--provider P --model M --base-url U] [--json]
                        score the pipeline against your reviewed decisions
@@ -492,6 +493,10 @@ func (a *app) cmdStatus(ctx context.Context) error {
 	fmt.Fprintf(w, "mode\t%s\n", a.cfg.Mode)
 	fmt.Fprintf(w, "provider\t%s (%s)\n", a.cfg.LLM.Provider, a.cfg.LLM.Model)
 	fmt.Fprintf(w, "threshold\t%.2f\n", a.cfg.LLM.Threshold)
+	fmt.Fprintf(w, "folders\t%v\n", a.cfg.Folders)
+	if len(a.cfg.Routes) > 0 {
+		fmt.Fprintf(w, "routes\t%d sender rules\n", len(a.cfg.Routes))
+	}
 	fmt.Fprintf(w, "launchd\t%v\n", launchd.Installed(a.paths.LaunchdPlist))
 	if upn, _ := a.st.GetState(ctx, store.KeyAccountUPN); upn != "" {
 		fmt.Fprintf(w, "account\t%s\n", upn)
@@ -633,8 +638,11 @@ func printDecisions(w io.Writer, rows []store.Decision) {
 	fmt.Fprintln(tw, "ID\tWHEN\tCATEGORY\tCONF\tSTAGE\tACTION\tFROM\tSUBJECT\tREASON")
 	for _, d := range rows {
 		act := d.Action
-		if d.Action == store.ActionMove && d.ActionAt == nil {
-			act = "would-move"
+		if d.Action == store.ActionMove {
+			act = "move:" + d.TargetFolder
+			if d.ActionAt == nil {
+				act = "would-" + act
+			}
 		}
 		if d.Corrected != "" {
 			act += "!" + d.Corrected
@@ -650,7 +658,7 @@ func printDecisions(w io.Writer, rows []store.Decision) {
 
 func (a *app) cmdUndo(ctx context.Context, args []string) error {
 	if len(args) != 1 {
-		return errors.New("usage: daakiya undo <id-prefix>")
+		return errors.New("usage: daakiya undo <id>")
 	}
 	d, err := a.st.FindDecisionByPrefix(ctx, args[0])
 	if err != nil {
@@ -695,7 +703,9 @@ func (a *app) setMode(mode string) error {
 		return err
 	}
 	if mode == config.ModeLive {
-		fmt.Println("Live mode: cold outreach will be moved to", a.cfg.Mailbox.FolderName+"/"+a.cfg.Mailbox.SubfolderName)
+		for cat, folder := range a.cfg.Folders {
+			fmt.Printf("Live mode: %s will be moved to %s/%s\n", cat, a.cfg.Mailbox.FolderName, folder)
+		}
 	} else {
 		fmt.Println("Shadow mode: decisions recorded, nothing moved.")
 	}
@@ -708,6 +718,7 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	apply := fs.Bool("apply", false, "apply actions (only has effect in live mode)")
 	max := fs.Int("max", 500, "maximum messages")
 	redo := fs.Bool("redo-unknown", false, "also re-run messages whose decision is unknown (e.g. after a provider error)")
+	reroute := fs.Bool("reroute", false, "also re-run already-classified messages that match a sender route (after adding a route)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -740,6 +751,13 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 				done = false
 			}
 		}
+		if done && *reroute {
+			for _, rt := range a.cfg.Routes {
+				if rules.MatchRoute(rules.Route{Match: rt.Match, Folder: rt.Folder}, m.From.Address) {
+					done = false
+				}
+			}
+		}
 		if !done {
 			batch = append(batch, m)
 		}
@@ -770,9 +788,11 @@ func isTerminal(f *os.File) bool {
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
+// short returns the tail of a message id: Graph immutable ids share a long
+// common prefix, so the end is what distinguishes them.
 func short(id string) string {
 	if len(id) > 8 {
-		return id[:8]
+		return id[len(id)-8:]
 	}
 	return id
 }

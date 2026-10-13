@@ -10,7 +10,7 @@ the record of who decided what; the few still open are marked.
 | Q3 | Language and runtime? | **Decided** | Go. ADR 0009 moved to accepted. Python allowed for throwaway spike scripts only. |
 | Q4 | Which local models are available? | **Decided** | None installed yet. Spike 2 installs Ollama and checks that a 4B-class and a 7B-to-9B-class model return valid output on a dozen sample emails. The measured Haiku-versus-local comparison happens at the end of the phase 1 shadow period on reviewed decisions. The owner's stated preference is to run local if quality holds; the eval decides. |
 | Q5 | Folder vs category as the primary effect? | Default applied | Folder plus category, as designed. |
-| Q6 | Handle `marketing` in v1? | Default applied | No; recorded only. |
+| Q6 | Handle `marketing` in v1? | **Decided** | Off by default, one config line to enable (`folders.marketing`). Added 2026-10-13 after the first month of data showed marketing was 40% of the inbox. Same mechanism as the cold outreach folder. |
 | Q7 | Folder location? | Default applied | Top-level `Daakiya/Cold Outreach`. |
 | Q8 | Owner profile text for the system prompt? | **Open, drafted at `init`** | Two or three lines: role, company, which topics are legitimately the owner's. Needed before the first prompt is measured. |
 | Q9 | Does the owner run OpenClaw or another agent gateway? | **Decided** | No. Spike 3 is dropped. The MCP server stays a phase 4 candidate on its own merits. |
@@ -24,3 +24,4 @@ the record of who decided what; the few still open are marked.
 
 1. The profile text (Q8), written during `init`; it can be revised at any time and the
    change is tracked by `prompt_version`.
+| Q15 | LinkedIn mail? | **Decided** | Owner asked for a plain sender rule. Added `[[routes]]`: sender address or domain to folder, applied before the model and in every mode. The owner's config routes `linkedin.com` to a `LinkedIn` folder. |

@@ -27,7 +27,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	if ok, _ := s.HasDecision(ctx, "abc123"); !ok {
 		t.Error("HasDecision false")
 	}
-	byPrefix, err := s.FindDecisionByPrefix(ctx, "abc")
+	byPrefix, err := s.FindDecisionByPrefix(ctx, "c123")
 	if err != nil || byPrefix.ID != "abc123" {
 		t.Errorf("prefix: %v %v", byPrefix.ID, err)
 	}
