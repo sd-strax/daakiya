@@ -192,7 +192,7 @@ func rotate(path string, f *os.File) {
 // --- wiring ---
 
 func (a *app) authenticator() (*auth.Authenticator, error) {
-	return auth.New(a.cfg.Mailbox.ClientID, a.cfg.Mailbox.TenantID, a.sec)
+	return auth.New(a.cfg.Mailbox.ClientID, a.cfg.Mailbox.TenantID, a.sec, a.paths.DataDir)
 }
 
 func (a *app) mailbox() (mail.Mailbox, *auth.Authenticator, error) {
@@ -473,7 +473,6 @@ func (a *app) cmdUninstall(ctx context.Context, args []string) error {
 		if au, err := a.authenticator(); err == nil {
 			_ = au.SignOut(ctx)
 		}
-		_ = a.sec.Delete(secrets.AccountMSALCache)
 		_ = a.sec.Delete(secrets.AccountLLMKey)
 		fmt.Println("Tokens and key removed from the Keychain.")
 		fmt.Println("To revoke the app's access entirely: https://myapps.microsoft.com (work) or https://account.live.com/consent/Manage (personal).")

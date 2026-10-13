@@ -55,6 +55,10 @@ func (Keychain) Set(account, value string) error {
 	if strings.ContainsAny(value, "\n\"") {
 		return errors.New("secret contains characters the keychain helper cannot pass safely")
 	}
+	if len(value) > 1024 {
+		// `security -i` wraps long lines; large blobs belong in an encrypted file (see internal/auth).
+		return errors.New("secret too large for the keychain helper")
+	}
 	// -U updates an existing item in place.
 	script := fmt.Sprintf("add-generic-password -a %q -s %q -U -w %q\n", account, Service, value)
 	cmd := exec.Command("security", "-i")

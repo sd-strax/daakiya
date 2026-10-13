@@ -4,13 +4,12 @@ package auth
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
-	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/cache"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 
 	"github.com/sd-strax/daakiya/internal/secrets"
@@ -24,48 +23,26 @@ var Scopes = []string{
 
 var ErrSignInRequired = errors.New("sign-in required: run `daakiya auth`")
 
-// keychainCache persists MSAL's opaque cache blob as one Keychain item.
-type keychainCache struct{ secrets secrets.Store }
-
-func (k keychainCache) Replace(ctx context.Context, c cache.Unmarshaler, _ cache.ReplaceHints) error {
-	b64, err := k.secrets.Get(secrets.AccountMSALCache)
-	if errors.Is(err, secrets.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	data, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		return nil // corrupt cache: start fresh rather than fail
-	}
-	return c.Unmarshal(data)
-}
-
-func (k keychainCache) Export(ctx context.Context, c cache.Marshaler, _ cache.ExportHints) error {
-	data, err := c.Marshal()
-	if err != nil {
-		return err
-	}
-	return k.secrets.Set(secrets.AccountMSALCache, base64.StdEncoding.EncodeToString(data))
-}
-
 type Authenticator struct {
 	client public.Client
+	cache  fileCache
 }
 
-func New(clientID, tenantID string, sec secrets.Store) (*Authenticator, error) {
+// New builds a public client whose token cache is an encrypted file under
+// dataDir, keyed from the Keychain.
+func New(clientID, tenantID string, sec secrets.Store, dataDir string) (*Authenticator, error) {
 	if tenantID == "" {
 		tenantID = "common"
 	}
+	fc := fileCache{secrets: sec, path: filepath.Join(dataDir, CacheFileName)}
 	c, err := public.New(clientID,
 		public.WithAuthority("https://login.microsoftonline.com/"+tenantID),
-		public.WithCache(keychainCache{secrets: sec}),
+		public.WithCache(fc),
 	)
 	if err != nil {
 		return nil, err
 	}
-	return &Authenticator{client: c}, nil
+	return &Authenticator{client: c, cache: fc}, nil
 }
 
 // Token returns an access token from the cache, refreshing silently. It never
@@ -101,16 +78,12 @@ func (a *Authenticator) SignIn(ctx context.Context, w io.Writer) (username strin
 	return res.Account.PreferredUsername, nil
 }
 
-// SignOut removes cached accounts.
+// SignOut removes cached accounts and deletes the cache file and its key.
 func (a *Authenticator) SignOut(ctx context.Context) error {
-	accounts, err := a.client.Accounts(ctx)
-	if err != nil {
-		return err
-	}
-	for _, acc := range accounts {
-		if err := a.client.RemoveAccount(ctx, acc); err != nil {
-			return err
+	if accounts, err := a.client.Accounts(ctx); err == nil {
+		for _, acc := range accounts {
+			_ = a.client.RemoveAccount(ctx, acc)
 		}
 	}
-	return nil
+	return a.cache.Clear()
 }

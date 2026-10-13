@@ -25,7 +25,7 @@ statistics. Release builds are reproducible and the Homebrew formula pins a chec
 
 | Data | To Microsoft Graph | To LLM provider | Stored locally |
 |------|-------------------|-----------------|----------------|
-| OAuth tokens | yes (that is what they are for) | no | Keychain only |
+| OAuth tokens | yes (that is what they are for) | no | MSAL cache file encrypted with AES-GCM; the key is in the Keychain |
 | LLM API key | no | yes, as the auth header | Keychain only |
 | Full message (body, attachments, all headers) | read from | **never** | no (only the fields below) |
 | Sender, subject, received time | read from | yes | yes |
@@ -47,8 +47,10 @@ the tool points this out during `init`.
   (`DAAKIYA_LLM_API_KEY`) exists for CI and for people who manage secrets differently; if
   set, it wins and nothing is written to the Keychain.
 - **Microsoft identity**: public client with no client secret, so there is nothing to leak
-  on that side. MSAL's token cache (which contains the refresh token) is serialized and
-  stored as a single Keychain item, not on disk. Scopes are the minimum that allows
+  on that side. MSAL's token cache (which contains the refresh token) is several kilobytes,
+  more than the `security` helper can pass safely, so it is stored as an AES-GCM encrypted
+  file in the data directory with a random 32-byte key held in the Keychain. The file alone
+  is useless; `uninstall --revoke` deletes both. Scopes are the minimum that allows
   reading, moving, and tagging mail in the owner's own mailbox. Application permissions
   (tenant-wide, no user) are never used.
 - **Entra app registration** belongs to the owner. The tool cannot act on any mailbox the
