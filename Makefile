@@ -13,7 +13,8 @@ vet:
 	go vet ./...
 
 install: build
-	mkdir -p $(HOME)/.local/bin && cp bin/daakiya $(HOME)/.local/bin/daakiya
+	# Rename into place: overwriting a Mach-O in place on Apple Silicon invalidates its signature and the kernel kills it (exit 137).
+	mkdir -p $(HOME)/.local/bin && cp bin/daakiya $(HOME)/.local/bin/daakiya.new && mv -f $(HOME)/.local/bin/daakiya.new $(HOME)/.local/bin/daakiya
 	@echo "installed to $(HOME)/.local/bin/daakiya (add it to PATH if needed)"
 
 release:
