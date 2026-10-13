@@ -63,6 +63,8 @@ type Mailbox interface {
 	NewMessages(ctx context.Context, cursor string) (Delta, error)
 	// Fetch loads the body and headers for one message.
 	Fetch(ctx context.Context, id string) (Message, error)
+	// InboxCount returns the total number of messages in the Inbox.
+	InboxCount(ctx context.Context) (int, error)
 	// ListInboxSince lists Inbox messages received after since (for backfill).
 	ListInboxSince(ctx context.Context, since time.Time, max int) ([]Message, error)
 	// ListFolder lists messages currently in a folder.

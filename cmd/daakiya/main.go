@@ -59,7 +59,7 @@ Operation
   apply-pending [--since YYYY-MM-DD] [--dry-run]
                        in live mode, move messages whose recorded decision says move but
                        which were decided in shadow mode or before a folder was configured
-  backfill --since YYYY-MM-DD [--apply] [--redo-unknown] [--reroute]
+  backfill --since YYYY-MM-DD [--max N] [--budget N] [--apply] [--redo-unknown] [--reroute]
                        classify existing Inbox mail; --apply tags (shadow) or moves (live)
   eval [--provider P --model M --base-url U] [--json]
                        score the pipeline against your reviewed decisions
@@ -517,6 +517,11 @@ func (a *app) cmdStatus(ctx context.Context) error {
 			fmt.Fprintf(w, "auth\tok\n")
 		}
 	}
+	if mb, _, err := a.mailbox(); err == nil {
+		if n, err := mb.InboxCount(ctx); err == nil {
+			fmt.Fprintf(w, "inbox\t%d messages\n", n)
+		}
+	}
 	if r, ok, _ := a.st.LastRun(ctx); ok {
 		fmt.Fprintf(w, "last run\t%s (%d new, %d rule, %d llm, %d would-move, %d moved, %d errors) %s\n",
 			r.FinishedAt.Local().Format(time.RFC3339), r.NewMessages, r.RuleDecisions, r.LLMDecisions, r.WouldMove, r.Moved, r.Errors, r.Note)
@@ -712,6 +717,7 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	max := fs.Int("max", 500, "maximum messages")
 	redo := fs.Bool("redo-unknown", false, "also re-run messages whose decision is unknown (e.g. after a provider error)")
 	reroute := fs.Bool("reroute", false, "also re-run already-classified messages that match a sender route (after adding a route)")
+	budget := fs.Int("budget", 0, "override llm.max_calls_per_day for this run (0 = use config)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -722,6 +728,14 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *budget > 0 {
+		a.cfg.LLM.MaxCallsPerDay = *budget
+	}
+	release, err := runner.Lock(a.paths.LockFile)
+	if err != nil {
+		return err
+	}
+	defer release()
 	r, err := a.runner(ctx, nil)
 	if err != nil {
 		return err
@@ -729,6 +743,7 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	if err := r.LoadFolders(ctx); err != nil {
 		return err
 	}
+	fmt.Fprintf(os.Stderr, "listing inbox since %s...\n", *since)
 	msgs, err := r.Mailbox.ListInboxSince(ctx, t, *max)
 	if err != nil {
 		return err

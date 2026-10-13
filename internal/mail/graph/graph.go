@@ -400,6 +400,16 @@ func (c *Client) listMessages(ctx context.Context, first string, max int) ([]mai
 	return out, nil
 }
 
+func (c *Client) InboxCount(ctx context.Context) (int, error) {
+	var f struct {
+		TotalItemCount int `json:"totalItemCount"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/me/mailFolders/inbox?$select=totalItemCount", nil, &f); err != nil {
+		return 0, err
+	}
+	return f.TotalItemCount, nil
+}
+
 func (c *Client) ListInboxSince(ctx context.Context, since time.Time, max int) ([]mail.Message, error) {
 	q := url.Values{}
 	q.Set("$select", listSelect)

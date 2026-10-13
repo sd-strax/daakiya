@@ -271,7 +271,7 @@ func (r *Runner) classifyOne(ctx context.Context, m mail.Message) (store.Decisio
 
 	// LLM stage, subject to the daily budget.
 	calls, _ := r.Store.CountLLMCallsSince(ctx, startOfDay(time.Now()))
-	if calls >= r.Cfg.LLM.MaxCallsPerDay {
+	if r.Cfg.LLM.MaxCallsPerDay > 0 && calls >= r.Cfg.LLM.MaxCallsPerDay {
 		d.Category, d.Confidence, d.Reason, d.Stage, d.Action = llm.Unknown, 0, "daily budget exhausted", "deferred", store.ActionDeferred
 		d.Attempts++
 		return d, ErrBudget
@@ -321,7 +321,7 @@ func (r *Runner) refreshCorrespondents(ctx context.Context, force bool) error {
 		}
 	}
 	since := time.Now().AddDate(0, -r.Cfg.Mailbox.CorrespondentMonths, 0)
-	addrs, convs, err := r.Mailbox.KnownCorrespondents(ctx, since, 2000)
+	addrs, convs, err := r.Mailbox.KnownCorrespondents(ctx, since, 20000)
 	if err != nil {
 		return err
 	}
