@@ -226,7 +226,11 @@ func (a *app) classifier(override *llmOverride) (llm.Classifier, error) {
 		if key == "" {
 			return nil, errors.New("no Anthropic API key: run `daakiya init` or set " + secrets.EnvLLMKey)
 		}
-		return llm.NewAnthropic(key, model), nil
+		effort := "low"
+		if override != nil && override.effort != "" {
+			effort = override.effort
+		}
+		return llm.NewAnthropic(key, model, effort), nil
 	case config.ProviderOpenAICompat:
 		if baseURL == "" {
 			return nil, errors.New("openai-compatible provider needs llm.base_url")
@@ -236,7 +240,7 @@ func (a *app) classifier(override *llmOverride) (llm.Classifier, error) {
 	return nil, fmt.Errorf("unknown provider %q", provider)
 }
 
-type llmOverride struct{ provider, model, baseURL string }
+type llmOverride struct{ provider, model, baseURL, effort string }
 
 func (a *app) runner(ctx context.Context, override *llmOverride) (*runner.Runner, error) {
 	mb, _, err := a.mailbox()
@@ -522,6 +526,10 @@ func (a *app) cmdStatus(ctx context.Context) error {
 func (a *app) cmdReview(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	mark := fs.Bool("mark", false, "interactively mark each unreviewed decision right or wrong")
+	judge := fs.Bool("judge", false, "grade unreviewed decisions with a stronger model; agreements become reviewed")
+	judgeProvider := fs.String("provider", "", "judge provider (default anthropic)")
+	judgeModel := fs.String("model", "claude-opus-5-5", "judge model")
+	judgeBase := fs.String("base-url", "", "judge base URL for openai-compatible")
 	n := fs.Int("n", 30, "rows")
 	unreviewed := fs.Bool("unreviewed", false, "only unreviewed LLM decisions")
 	asJSON := fs.Bool("json", false, "JSON lines output")
@@ -529,6 +537,9 @@ func (a *app) cmdReview(ctx context.Context, args []string) error {
 	sample := fs.Int("sample", 0, "with --mark: grade a random sample of this many rows instead of all")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *judge {
+		return a.judge(ctx, *judgeProvider, *judgeModel, *judgeBase, *n)
 	}
 	f := store.DecisionFilter{Limit: *n, Unreviewed: *unreviewed || *mark, Category: *category}
 	if *sample > 0 {
@@ -554,8 +565,12 @@ func (a *app) cmdReview(ctx context.Context, args []string) error {
 	in := bufio.NewReader(os.Stdin)
 	fmt.Fprintf(a.out, "%d unreviewed. For each: y = correct, n = wrong, c/m/t/r = it was cold_outreach/marketing/notification/correspondence, s = skip, q = quit\n\n", len(rows))
 	for _, d := range rows {
-		fmt.Fprintf(a.out, "[%s] %s <%s>\n  %s\n  -> %s (%.2f, %s): %s\n  %s\n",
-			short(d.ID), d.FromName, d.FromAddr, d.Subject, d.Category, d.Confidence, d.Relationship, d.Reason, truncateStr(d.Excerpt, 300))
+		fmt.Fprintf(a.out, "[%s] %s <%s>\n  %s\n  -> %s (%.2f, %s): %s\n",
+			short(d.ID), d.FromName, d.FromAddr, d.Subject, d.Category, d.Confidence, d.Relationship, d.Reason)
+		if d.JudgeLabel != "" {
+			fmt.Fprintf(a.out, "  judge %s says: %s\n", d.JudgeModel, d.JudgeLabel)
+		}
+		fmt.Fprintf(a.out, "  %s\n", truncateStr(d.Excerpt, 300))
 		fmt.Fprint(a.out, "  [y/n/c/m/t/r/s/q] ")
 		s, _ := in.ReadString('\n')
 		s = strings.ToLower(strings.TrimSpace(s))
@@ -578,7 +593,7 @@ func (a *app) cmdReview(ctx context.Context, args []string) error {
 		default:
 			continue
 		}
-		if err := a.st.MarkReviewed(ctx, d.ID, label); err != nil {
+		if err := a.st.MarkReviewed(ctx, d.ID, label, "owner"); err != nil {
 			return err
 		}
 		// A wrong cold_outreach that was (or would be) moved is a false positive worth learning from.

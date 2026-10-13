@@ -15,14 +15,20 @@ import (
 type Anthropic struct {
 	client anthropic.Client
 	model  string
+	effort anthropic.OutputConfigEffort
 }
 
-func NewAnthropic(apiKey, model string) *Anthropic {
-	opts := []option.RequestOption{option.WithMaxRetries(2), option.WithRequestTimeout(60 * time.Second)}
+// NewAnthropic builds a classifier. effort is "low" for the cheap pipeline
+// model and typically "medium" for a judge model.
+func NewAnthropic(apiKey, model, effort string) *Anthropic {
+	opts := []option.RequestOption{option.WithMaxRetries(2), option.WithRequestTimeout(120 * time.Second)}
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))
 	}
-	return &Anthropic{client: anthropic.NewClient(opts...), model: model}
+	if effort == "" {
+		effort = "low"
+	}
+	return &Anthropic{client: anthropic.NewClient(opts...), model: model, effort: anthropic.OutputConfigEffort(effort)}
 }
 
 func (a *Anthropic) Name() string  { return "anthropic" }
@@ -38,13 +44,13 @@ func (a *Anthropic) Classify(ctx context.Context, sys string, examples []Example
 
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
-		MaxTokens: 1024,
+		MaxTokens: 4096,
 		System:    system,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(RenderInput(in))),
 		},
 		OutputConfig: anthropic.OutputConfigParam{
-			Effort: anthropic.OutputConfigEffortLow,
+			Effort: a.effort,
 			Format: anthropic.JSONOutputFormatParam{Schema: Schema},
 		},
 	}
@@ -52,7 +58,7 @@ func (a *Anthropic) Classify(ctx context.Context, sys string, examples []Example
 	// needs none of it. Disabling is only accepted at effort high or below, which
 	// low satisfies. Other model families reject the disabled setting, so leave
 	// them on adaptive thinking.
-	if strings.Contains(a.model, "haiku") {
+	if strings.Contains(a.model, "haiku") && a.effort == anthropic.OutputConfigEffortLow {
 		params.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &anthropic.ThinkingConfigDisabledParam{}}
 	}
 	resp, err := a.client.Messages.New(ctx, params)

@@ -31,7 +31,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err != nil || byPrefix.ID != "abc123" {
 		t.Errorf("prefix: %v %v", byPrefix.ID, err)
 	}
-	if err := s.MarkReviewed(ctx, "abc123", "cold_outreach"); err != nil {
+	if err := s.MarkReviewed(ctx, "abc123", "cold_outreach", "owner"); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := s.ListDecisions(ctx, DecisionFilter{Reviewed: true})

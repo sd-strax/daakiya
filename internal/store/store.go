@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS decisions (
   corrected_at TEXT,
   reviewed_label TEXT,
   reviewed_at TEXT,
+  reviewed_source TEXT,
+  judge_label TEXT,
+  judge_model TEXT,
   attempts INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS decisions_decided_at ON decisions(decided_at);
@@ -127,6 +130,9 @@ type Decision struct {
 	CorrectedAt       *time.Time
 	ReviewedLabel     string
 	ReviewedAt        *time.Time
+	ReviewedSource    string // owner | judge
+	JudgeLabel        string
+	JudgeModel        string
 	Attempts          int
 }
 
@@ -161,10 +167,45 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
-	return &Store{db: db}, nil
+	st := &Store{db: db}
+	if err := st.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return st, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// migrate adds columns introduced after the first release.
+func (s *Store) migrate() error {
+	rows, err := s.db.Query(`PRAGMA table_info(decisions)`)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		have[name] = true
+	}
+	rows.Close()
+	for _, col := range []string{"reviewed_source TEXT", "judge_label TEXT", "judge_model TEXT"} {
+		name := col[:len(col)-len(" TEXT")]
+		if !have[name] {
+			if _, err := s.db.Exec(`ALTER TABLE decisions ADD COLUMN ` + col); err != nil {
+				return fmt.Errorf("migrate %s: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
 
 func ts(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 func tsp(t *time.Time) any {
@@ -258,10 +299,10 @@ func (s *Store) ReplaceList(ctx context.Context, kind, source string, values []s
 
 const decisionCols = `id, internet_message_id, conversation_id, received_at, from_name, from_addr, from_domain, subject, excerpt, signals,
 category, confidence, reason, relationship, stage, provider, model, prompt_version, input_tokens, output_tokens, cost_usd, latency_ms,
-action, action_at, mode, decided_at, corrected, corrected_at, reviewed_label, reviewed_at, attempts`
+action, action_at, mode, decided_at, corrected, corrected_at, reviewed_label, reviewed_at, reviewed_source, judge_label, judge_model, attempts`
 
 func (s *Store) UpsertDecision(ctx context.Context, d Decision) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decisions (`+decisionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decisions (`+decisionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
  category=excluded.category, confidence=excluded.confidence, reason=excluded.reason, relationship=excluded.relationship,
  stage=excluded.stage, provider=excluded.provider, model=excluded.model, prompt_version=excluded.prompt_version,
@@ -270,7 +311,7 @@ ON CONFLICT(id) DO UPDATE SET
  excerpt=excluded.excerpt, signals=excluded.signals`,
 		d.ID, d.InternetMessageID, d.ConversationID, ts(d.ReceivedAt), d.FromName, d.FromAddr, d.FromDomain, d.Subject, d.Excerpt, d.Signals,
 		d.Category, d.Confidence, d.Reason, d.Relationship, d.Stage, d.Provider, d.Model, d.PromptVersion, d.InputTokens, d.OutputTokens, d.CostUSD, d.LatencyMS,
-		d.Action, tsp(d.ActionAt), d.Mode, ts(d.DecidedAt), nullIfEmpty(d.Corrected), tsp(d.CorrectedAt), nullIfEmpty(d.ReviewedLabel), tsp(d.ReviewedAt), d.Attempts)
+		d.Action, tsp(d.ActionAt), d.Mode, ts(d.DecidedAt), nullIfEmpty(d.Corrected), tsp(d.CorrectedAt), nullIfEmpty(d.ReviewedLabel), tsp(d.ReviewedAt), nullIfEmpty(d.ReviewedSource), nullIfEmpty(d.JudgeLabel), nullIfEmpty(d.JudgeModel), d.Attempts)
 	return err
 }
 
@@ -284,10 +325,10 @@ func nullIfEmpty(s string) any {
 func scanDecision(sc interface{ Scan(...any) error }) (Decision, error) {
 	var d Decision
 	var receivedAt, decidedAt string
-	var actionAt, correctedAt, reviewedAt, corrected, reviewedLabel sql.NullString
+	var actionAt, correctedAt, reviewedAt, corrected, reviewedLabel, reviewedSource, judgeLabel, judgeModel sql.NullString
 	err := sc.Scan(&d.ID, &d.InternetMessageID, &d.ConversationID, &receivedAt, &d.FromName, &d.FromAddr, &d.FromDomain, &d.Subject, &d.Excerpt, &d.Signals,
 		&d.Category, &d.Confidence, &d.Reason, &d.Relationship, &d.Stage, &d.Provider, &d.Model, &d.PromptVersion, &d.InputTokens, &d.OutputTokens, &d.CostUSD, &d.LatencyMS,
-		&d.Action, &actionAt, &d.Mode, &decidedAt, &corrected, &correctedAt, &reviewedLabel, &reviewedAt, &d.Attempts)
+		&d.Action, &actionAt, &d.Mode, &decidedAt, &corrected, &correctedAt, &reviewedLabel, &reviewedAt, &reviewedSource, &judgeLabel, &judgeModel, &d.Attempts)
 	if err != nil {
 		return d, err
 	}
@@ -295,6 +336,7 @@ func scanDecision(sc interface{ Scan(...any) error }) (Decision, error) {
 	d.DecidedAt, _ = time.Parse(time.RFC3339, decidedAt)
 	d.ActionAt, d.CorrectedAt, d.ReviewedAt = parseTS(actionAt), parseTS(correctedAt), parseTS(reviewedAt)
 	d.Corrected, d.ReviewedLabel = corrected.String, reviewedLabel.String
+	d.ReviewedSource, d.JudgeLabel, d.JudgeModel = reviewedSource.String, judgeLabel.String, judgeModel.String
 	return d, nil
 }
 
@@ -400,9 +442,34 @@ func (s *Store) MarkCorrected(ctx context.Context, id, kind string) error {
 	return err
 }
 
-func (s *Store) MarkReviewed(ctx context.Context, id, label string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE decisions SET reviewed_label=?, reviewed_at=? WHERE id=?`, label, ts(time.Now()), id)
+func (s *Store) MarkReviewed(ctx context.Context, id, label, source string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE decisions SET reviewed_label=?, reviewed_at=?, reviewed_source=? WHERE id=?`, label, ts(time.Now()), source, id)
 	return err
+}
+
+// SetJudge records a judge model's opinion without marking the row reviewed.
+func (s *Store) SetJudge(ctx context.Context, id, label, model string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE decisions SET judge_label=?, judge_model=? WHERE id=?`, label, model, id)
+	return err
+}
+
+// ReviewedSources counts reviewed rows by who reviewed them.
+func (s *Store) ReviewedSources(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(reviewed_source,'owner'), COUNT(*) FROM decisions WHERE reviewed_label IS NOT NULL GROUP BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var k string
+		var n int
+		if err := rows.Scan(&k, &n); err != nil {
+			return nil, err
+		}
+		out[k] = n
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) SetAction(ctx context.Context, id, action string, at time.Time) error {

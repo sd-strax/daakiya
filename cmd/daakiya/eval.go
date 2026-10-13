@@ -85,6 +85,7 @@ func (a *app) cmdEval(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.out)
 	}
 	rep := score(ev, a.cfg.LLM.Threshold)
+	rep.Sources, _ = a.st.ReviewedSources(ctx)
 	if *asJSON {
 		enc := json.NewEncoder(a.out)
 		enc.SetIndent("", "  ")
@@ -115,6 +116,7 @@ type report struct {
 	Cost       float64
 	LatencyP50 int64
 	LatencyP95 int64
+	Sources    map[string]int
 }
 
 func score(ev []evalRow, threshold float64) report {
@@ -204,6 +206,9 @@ func printReport(w io.Writer, rep report, cl llm.Classifier) {
 	}
 	tw.Flush()
 	fmt.Fprintf(w, "\ntokens %d, est. cost $%.4f, latency p50 %dms p95 %dms\n", rep.Tokens, rep.Cost, rep.LatencyP50, rep.LatencyP95)
+	if len(rep.Sources) > 0 {
+		fmt.Fprintf(w, "labels by source: %v (judge-agreed labels are not ground truth; disagreements were graded by you)\n", rep.Sources)
+	}
 }
 
 func writeJSONLines(w io.Writer, rows []store.Decision) error {
