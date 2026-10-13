@@ -12,6 +12,9 @@ import (
 type fakeLists map[string]bool
 
 func (f fakeLists) InList(_ context.Context, kind, v string) (bool, error) { return f[kind+":"+v], nil }
+func (f fakeLists) ConversationHasCorrespondence(_ context.Context, c string) (bool, error) {
+	return f["conv_corr:"+c], nil
+}
 
 func TestEvaluateOrder(t *testing.T) {
 	lists := fakeLists{
@@ -79,5 +82,17 @@ func TestRoutes(t *testing.T) {
 	v, _ = Evaluate(context.Background(), lists, classify.Normalized{FromAddr: "friend@linkedin.com", FromDomain: "linkedin.com"}, "", routes)
 	if v.Rule != "known_correspondent" {
 		t.Errorf("known correspondent should win over route: %+v", v)
+	}
+}
+
+func TestThreadConsistency(t *testing.T) {
+	lists := fakeLists{"conv_corr:thread9": true}
+	v, _ := Evaluate(context.Background(), lists, classify.Normalized{FromAddr: "nitin@firm.in", FromDomain: "firm.in", FromLocal: "nitin"}, "thread9", nil)
+	if v.Rule != "thread_consistency" || v.Category != llm.Correspondence {
+		t.Errorf("thread consistency: %+v", v)
+	}
+	v, _ = Evaluate(context.Background(), lists, classify.Normalized{FromAddr: "nitin@firm.in", FromDomain: "firm.in", FromLocal: "nitin"}, "thread10", nil)
+	if v.Matched {
+		t.Errorf("other thread should not match: %+v", v)
 	}
 }

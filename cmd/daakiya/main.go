@@ -51,9 +51,14 @@ Operation
   review [--mark] [-n N] [--unreviewed] [--category C] [--sample N] [--json]
                        recent decisions; --mark asks right/wrong per row
   undo <id>            move a message back to the Inbox and learn from it (id as shown by review)
+  mark <id> <label>    grade one decision non-interactively (label: cold_outreach, marketing,
+                       notification, correspondence, or ok to confirm)
   allow <addr|domain>  never treat this sender as cold outreach
   deny <addr|domain>   always treat this sender as cold outreach
   promote | demote     switch between live and shadow mode
+  apply-pending [--since YYYY-MM-DD] [--dry-run]
+                       in live mode, move messages whose recorded decision says move but
+                       which were decided in shadow mode or before a folder was configured
   backfill --since YYYY-MM-DD [--apply] [--redo-unknown] [--reroute]
                        classify existing Inbox mail; --apply tags (shadow) or moves (live)
   eval [--provider P --model M --base-url U] [--json]
@@ -128,6 +133,8 @@ func main() {
 		exitOn(a.cmdReview(ctx, args))
 	case "undo":
 		exitOn(a.cmdUndo(ctx, args))
+	case "mark":
+		exitOn(a.cmdMark(ctx, args))
 	case "allow":
 		exitOn(a.cmdList(ctx, args, store.ListAllowAddr, store.ListAllowDomain))
 	case "deny":
@@ -138,6 +145,8 @@ func main() {
 		exitOn(a.setMode(config.ModeShadow))
 	case "backfill":
 		exitOn(a.cmdBackfill(ctx, args))
+	case "apply-pending":
+		exitOn(a.cmdApplyPending(ctx, args))
 	case "eval":
 		exitOn(a.cmdEval(ctx, args))
 	case "refresh-correspondents":
@@ -598,24 +607,8 @@ func (a *app) cmdReview(ctx context.Context, args []string) error {
 		default:
 			continue
 		}
-		if err := a.st.MarkReviewed(ctx, d.ID, label, "owner"); err != nil {
+		if err := a.applyLabel(ctx, d, label); err != nil {
 			return err
-		}
-		// A wrong cold_outreach that was (or would be) moved is a false positive worth learning from.
-		if label != d.Category && d.Category == llm.ColdOutreach && d.Corrected == "" {
-			ap, err := a.applier(ctx)
-			if err == nil {
-				if d.ActionAt != nil {
-					_ = ap.Undo(ctx, d)
-				} else {
-					_ = ap.RecordFalsePositive(ctx, d)
-				}
-			}
-		}
-		if label == llm.ColdOutreach && d.Category != llm.ColdOutreach && d.Corrected == "" {
-			if ap, err := a.applier(ctx); err == nil {
-				_ = ap.RecordFalseNegative(ctx, d)
-			}
 		}
 		fmt.Fprintln(a.out)
 	}
@@ -803,4 +796,135 @@ func truncateStr(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+// cmdApplyPending re-derives the action for every un-actioned decision from
+// its recorded category and confidence using the current config, and applies
+// moves. It lets a month of shadow decisions, or a newly configured folder,
+// take effect without spending on the model again.
+func (a *app) cmdApplyPending(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("apply-pending", flag.ContinueOnError)
+	since := fs.String("since", "", "YYYY-MM-DD (default: 60 days ago)")
+	dry := fs.Bool("dry-run", false, "list what would move without moving")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if a.cfg.Mode != config.ModeLive && !*dry {
+		return errors.New("apply-pending only moves mail in live mode; run `daakiya promote` first, or use --dry-run")
+	}
+	from := time.Now().Add(-60 * 24 * time.Hour)
+	if *since != "" {
+		t, err := time.ParseInLocation("2006-01-02", *since, time.Local)
+		if err != nil {
+			return err
+		}
+		from = t
+	}
+	ap, err := a.applier(ctx)
+	if err != nil {
+		return err
+	}
+	rows, err := a.st.PendingCandidates(ctx, from)
+	if err != nil {
+		return err
+	}
+	var moved, skipped, failed int
+	byFolder := map[string]int{}
+	for _, d := range rows {
+		known, _ := a.st.InList(ctx, store.ListCorrespondent, d.FromAddr)
+		var action, folder string
+		switch {
+		case d.Rule == actions.RuleRoute:
+			action, folder = d.Action, d.TargetFolder
+		case d.Stage == "rule" && d.Category == llm.ColdOutreach:
+			action, folder = store.ActionMove, a.cfg.Folders[llm.ColdOutreach]
+		default:
+			action, folder = classify.Decide(llm.Result{Category: d.Category, Confidence: d.Confidence, Relationship: d.Relationship}, a.cfg.LLM.Threshold, known, a.cfg.Folders)
+		}
+		if action != store.ActionMove || folder == "" {
+			skipped++
+			continue
+		}
+		// Only touch messages still in the Inbox; the owner may have filed them.
+		loc, err := ap.Mailbox.Locate(ctx, d.ID)
+		if err != nil || loc != ap.Folders.InboxID {
+			skipped++
+			continue
+		}
+		byFolder[folder]++
+		if *dry {
+			fmt.Fprintf(a.out, "would move  %-14s %-32s %s -> %s\n", d.Category, truncateStr(d.FromAddr, 32), truncateStr(d.Subject, 40), folder)
+			continue
+		}
+		d.Action, d.TargetFolder, d.Mode = store.ActionMove, folder, a.cfg.Mode
+		if err := ap.Apply(ctx, &d); err != nil {
+			failed++
+			a.logf("apply-pending: %s: %v", short(d.ID), err)
+			continue
+		}
+		if err := a.st.UpsertDecision(ctx, d); err != nil {
+			return err
+		}
+		moved++
+	}
+	if *dry {
+		fmt.Fprintf(a.out, "would move %v, skipped %d\n", byFolder, skipped)
+		return nil
+	}
+	fmt.Fprintf(a.out, "moved %d %v, skipped %d, failed %d\n", moved, byFolder, skipped, failed)
+	return nil
+}
+
+// applyLabel records an owner grade and runs the learning side effects: a
+// wrong cold_outreach call is a false positive (undone if it was moved), and a
+// missed cold_outreach is a false negative.
+func (a *app) applyLabel(ctx context.Context, d store.Decision, label string) error {
+	if err := a.st.MarkReviewed(ctx, d.ID, label, "owner"); err != nil {
+		return err
+	}
+	if label == "wrong" || label == d.Category {
+		return nil
+	}
+	ap, err := a.applier(ctx)
+	if err != nil {
+		return err
+	}
+	if d.Category == llm.ColdOutreach && d.Corrected == "" {
+		if d.ActionAt != nil {
+			return ap.Undo(ctx, d)
+		}
+		return ap.RecordFalsePositive(ctx, d)
+	}
+	if label == llm.ColdOutreach && d.Corrected == "" {
+		return ap.RecordFalseNegative(ctx, d)
+	}
+	return nil
+}
+
+func (a *app) cmdMark(ctx context.Context, args []string) error {
+	if len(args) != 2 {
+		return errors.New("usage: daakiya mark <id> <cold_outreach|marketing|notification|correspondence|ok>")
+	}
+	d, err := a.st.FindDecisionByPrefix(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	label := strings.ToLower(args[1])
+	if label == "ok" || label == "y" {
+		label = d.Category
+	}
+	valid := false
+	for _, c := range llm.Categories {
+		if label == c {
+			valid = true
+		}
+	}
+	if !valid {
+		return fmt.Errorf("label must be one of %v or ok", llm.Categories)
+	}
+	if err := a.applyLabel(ctx, d, label); err != nil {
+		return err
+	}
+	fmt.Printf("%s: %s -> %s\n", short(d.ID), d.Category, label)
+	return nil
 }

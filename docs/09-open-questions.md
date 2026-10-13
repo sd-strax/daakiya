@@ -25,3 +25,4 @@ the record of who decided what; the few still open are marked.
 1. The profile text (Q8), written during `init`; it can be revised at any time and the
    change is tracked by `prompt_version`.
 | Q15 | LinkedIn mail? | **Decided** | Owner asked for a plain sender rule. Added `[[routes]]`: sender address or domain to folder, applied before the model and in every mode. The owner's config routes `linkedin.com` to a `LinkedIn` folder. |
+| Q16 | Threshold after the first month? | **Decided: stay at 0.85** | The first eval showed precision 1.0 at 0.80, so the threshold was briefly lowered. Three rows were still `unknown` when that eval ran; once re-run, two one-line replies in a live accounting thread came back as cold outreach at exactly 0.80. Reverted to 0.85, added the thread-consistency rule, and recorded the lesson: re-run eval after any redo before touching the threshold. |

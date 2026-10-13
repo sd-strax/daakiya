@@ -75,6 +75,10 @@ cost, and they are entirely the owner's data.
 2. **In-thread reply.** `In-Reply-To` or `References` matches a message the owner sent, or
    `conversation_id` matches a conversation with a message from the owner. Result:
    `correspondence`.
+2b. **Thread consistency.** An earlier decision in the same conversation was
+   `correspondence` (by rule, by the model with strong relationship evidence, or confirmed
+   by the owner). Short replies in a live thread carry too little text to judge alone;
+   this rule keeps them with the thread. Result: `correspondence`.
 3. **Routes.** Owner-written sender rules in config (`[[routes]]` with `match` and
    `folder`). `match` is an address, or a domain which also matches its subdomains. A match
    is moved to the named subfolder in every mode, including shadow, because the owner

@@ -446,6 +446,42 @@ func (s *Store) ListDecisions(ctx context.Context, f DecisionFilter) ([]Decision
 	return out, rows.Err()
 }
 
+// ConversationHasCorrespondence reports whether an earlier decision in the same
+// conversation was correspondence (by rule, by the model with strong evidence,
+// or confirmed by the owner). Used so a short reply in a live thread is never
+// flagged on its own.
+func (s *Store) ConversationHasCorrespondence(ctx context.Context, conversationID string) (bool, error) {
+	if conversationID == "" {
+		return false, nil
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM decisions WHERE conversation_id=? AND (
+		(category='correspondence' AND (stage='rule' OR relationship='strong' OR reviewed_label='correspondence'))
+		OR reviewed_label='correspondence' OR corrected='fp')`, conversationID).Scan(&n)
+	return n > 0, err
+}
+
+// PendingCandidates returns uncorrected decisions that have not been actioned:
+// shadow would-moves, and model decisions whose category may now have a folder.
+func (s *Store) PendingCandidates(ctx context.Context, since time.Time) ([]Decision, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+decisionCols+` FROM decisions
+		WHERE action_at IS NULL AND corrected IS NULL AND action <> ? AND stage IN ('llm','rule') AND decided_at >= ?
+		ORDER BY decided_at`, ActionDeferred, ts(since))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Decision
+	for rows.Next() {
+		d, err := scanDecision(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) MarkCorrected(ctx context.Context, id, kind string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE decisions SET corrected=?, corrected_at=? WHERE id=?`, kind, ts(time.Now()), id)
 	return err

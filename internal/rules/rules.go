@@ -38,6 +38,7 @@ var automatedLocalParts = map[string]bool{
 
 type Lists interface {
 	InList(ctx context.Context, kind, value string) (bool, error)
+	ConversationHasCorrespondence(ctx context.Context, conversationID string) (bool, error)
 }
 
 // MatchRoute reports whether a route matches a sender address. A route with an
@@ -76,6 +77,10 @@ func Evaluate(ctx context.Context, lists Lists, n classify.Normalized, conversat
 	// 2. In-thread reply to a conversation the owner took part in.
 	if ok, err := in(store.ListSentConversation, conversationID); err != nil || ok {
 		return verdict(ok, llm.Correspondence, 1.0, "reply in a thread you took part in", "in_thread"), err
+	}
+	// 2b. Thread consistency: an earlier message in this conversation was correspondence.
+	if ok, err := lists.ConversationHasCorrespondence(ctx, conversationID); err != nil || ok {
+		return verdict(ok, llm.Correspondence, 1.0, "earlier message in this thread was correspondence", "thread_consistency"), err
 	}
 	// 3. Owner-written sender routes.
 	for _, r := range routes {

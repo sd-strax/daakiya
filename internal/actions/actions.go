@@ -46,6 +46,7 @@ func (a *Applier) Apply(ctx context.Context, d *store.Decision) error {
 	if err := a.addCategory(ctx, d.ID, a.Cfg.Mailbox.Category); err != nil {
 		return err
 	}
+	_ = a.removeCategories(ctx, d.ID, a.Cfg.Mailbox.ShadowCategory)
 	newID, err := a.Mailbox.Move(ctx, d.ID, dest)
 	if err != nil {
 		return err
