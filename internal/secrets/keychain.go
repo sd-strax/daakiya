@@ -91,5 +91,5 @@ func (s *Memory) Get(a string) (string, error) {
 	}
 	return v, nil
 }
-func (s *Memory) Set(a, v string) error  { s.m[a] = v; return nil }
-func (s *Memory) Delete(a string) error  { delete(s.m, a); return nil }
+func (s *Memory) Set(a, v string) error { s.m[a] = v; return nil }
+func (s *Memory) Delete(a string) error { delete(s.m, a); return nil }

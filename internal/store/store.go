@@ -78,15 +78,15 @@ const (
 
 // Sync state keys.
 const (
-	KeyDeltaLink            = "delta_link"
-	KeyFolderID             = "folder_id"
-	KeySubfolderID          = "subfolder_id"
-	KeyInboxID              = "inbox_id"
-	KeyCorrespondentsAt     = "correspondents_refreshed_at"
-	KeyLastRunAt            = "last_run_at"
-	KeyLastRunNote          = "last_run_note"
-	KeyAccountUPN           = "account_upn"
-	KeyImmutableIDs         = "immutable_ids"
+	KeyDeltaLink        = "delta_link"
+	KeyFolderID         = "folder_id"
+	KeySubfolderID      = "subfolder_id"
+	KeyInboxID          = "inbox_id"
+	KeyCorrespondentsAt = "correspondents_refreshed_at"
+	KeyLastRunAt        = "last_run_at"
+	KeyLastRunNote      = "last_run_note"
+	KeyAccountUPN       = "account_upn"
+	KeyImmutableIDs     = "immutable_ids"
 )
 
 // Actions.
@@ -141,9 +141,9 @@ type Example struct {
 }
 
 type RunSummary struct {
-	StartedAt, FinishedAt                                                time.Time
+	StartedAt, FinishedAt                                              time.Time
 	NewMessages, RuleDecisions, LLMDecisions, WouldMove, Moved, Errors int
-	Note                                                                 string
+	Note                                                               string
 }
 
 type Store struct{ db *sql.DB }

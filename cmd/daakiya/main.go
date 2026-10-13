@@ -750,4 +750,3 @@ func truncateStr(s string, n int) string {
 	}
 	return s[:n-1] + "…"
 }
-

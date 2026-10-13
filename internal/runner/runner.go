@@ -308,7 +308,9 @@ func (r *Runner) refreshCorrespondents(ctx context.Context, force bool) error {
 	return r.Store.SetState(ctx, store.KeyCorrespondentsAt, time.Now().UTC().Format(time.RFC3339))
 }
 
-func (r *Runner) RefreshCorrespondents(ctx context.Context) error { return r.refreshCorrespondents(ctx, true) }
+func (r *Runner) RefreshCorrespondents(ctx context.Context) error {
+	return r.refreshCorrespondents(ctx, true)
+}
 
 func startOfDay(t time.Time) time.Time {
 	y, m, d := t.Date()

@@ -28,7 +28,7 @@ func TestDeltaMoveAndRetry(t *testing.T) {
 		}
 		if r.URL.Query().Get("page") == "2" {
 			json.NewEncoder(w).Encode(map[string]any{
-				"value":           []any{map[string]any{"id": "m2", "@removed": map[string]string{"reason": "deleted"}}},
+				"value":            []any{map[string]any{"id": "m2", "@removed": map[string]string{"reason": "deleted"}}},
 				"@odata.deltaLink": "http://x/delta?token=final",
 			})
 			return
@@ -36,7 +36,7 @@ func TestDeltaMoveAndRetry(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"value": []any{map[string]any{
 				"id": "m1", "subject": "hello", "conversationId": "c1", "receivedDateTime": "2026-10-13T10:00:00Z",
-				"from": map[string]any{"emailAddress": map[string]string{"name": "Joe", "address": "JOE@X.IO"}},
+				"from":         map[string]any{"emailAddress": map[string]string{"name": "Joe", "address": "JOE@X.IO"}},
 				"toRecipients": []any{map[string]any{"emailAddress": map[string]string{"address": "me@y.com"}}},
 			}},
 			"@odata.nextLink": "http://" + r.Host + "/me/mailFolders/inbox/messages/delta?page=2",

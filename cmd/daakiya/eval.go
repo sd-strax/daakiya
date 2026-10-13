@@ -95,9 +95,9 @@ func (a *app) cmdEval(ctx context.Context, args []string) error {
 }
 
 type catScore struct {
-	Category                 string
-	TP, FP, FN, Support      int
-	Precision, Recall        float64
+	Category            string
+	TP, FP, FN, Support int
+	Precision, Recall   float64
 }
 
 type thresholdScore struct {

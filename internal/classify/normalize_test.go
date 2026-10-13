@@ -9,12 +9,12 @@ import (
 
 func TestRegistrableDomain(t *testing.T) {
 	cases := map[string]string{
-		"example.com":          "example.com",
-		"mail.example.com":     "example.com",
-		"a.b.example.co.uk":    "example.co.uk",
-		"EXAMPLE.COM.":         "example.com",
-		"localhost":            "localhost",
-		"news.vendor.com.au":   "vendor.com.au",
+		"example.com":        "example.com",
+		"mail.example.com":   "example.com",
+		"a.b.example.co.uk":  "example.co.uk",
+		"EXAMPLE.COM.":       "example.com",
+		"localhost":          "localhost",
+		"news.vendor.com.au": "vendor.com.au",
 	}
 	for in, want := range cases {
 		if got := RegistrableDomain(in); got != want {
@@ -53,9 +53,9 @@ func TestCleanBodyTruncatesAndRedacts(t *testing.T) {
 
 func TestNormalizeSignals(t *testing.T) {
 	m := mail.Message{
-		From:    mail.Address{Name: "Joe", Address: "Joe@Mail.Growth.IO"},
-		To:      []mail.Address{{Address: "sudeep@hypredge.com"}},
-		Subject: " Quick question ",
+		From:     mail.Address{Name: "Joe", Address: "Joe@Mail.Growth.IO"},
+		To:       []mail.Address{{Address: "sudeep@hypredge.com"}},
+		Subject:  " Quick question ",
 		BodyHTML: `<html><head><style>p{}</style></head><body><p>Hi there,</p><p>Book time: <a href="https://calendly.com/joe/15min">here</a></p><img src="x" width="1" height="1"></body></html>`,
 		Headers: map[string][]string{
 			"list-unsubscribe": {"<mailto:u@x>"},

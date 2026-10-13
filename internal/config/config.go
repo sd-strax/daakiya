@@ -15,7 +15,7 @@ const (
 	ModeShadow = "shadow"
 	ModeLive   = "live"
 
-	ProviderAnthropic  = "anthropic"
+	ProviderAnthropic    = "anthropic"
 	ProviderOpenAICompat = "openai-compatible"
 )
 
@@ -107,11 +107,11 @@ func Default() Config {
 
 // Paths groups the on-disk locations. All are under the user's home.
 type Paths struct {
-	ConfigFile string
-	DataDir    string
-	DBFile     string
-	LogFile    string
-	LockFile   string
+	ConfigFile   string
+	DataDir      string
+	DBFile       string
+	LogFile      string
+	LockFile     string
 	LaunchdPlist string
 }
 

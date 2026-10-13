@@ -30,25 +30,25 @@ const (
 
 // Input is the compact, provider-neutral record sent to the model.
 type Input struct {
-	FromName      string
-	FromAddr      string
-	FromDomain    string
-	KnownToOwner  bool
-	ReplyTo       string
-	Subject       string
-	Signals       Signals
-	Body          string
+	FromName     string
+	FromAddr     string
+	FromDomain   string
+	KnownToOwner bool
+	ReplyTo      string
+	Subject      string
+	Signals      Signals
+	Body         string
 }
 
 // Signals are header- and content-derived booleans computed locally.
 type Signals struct {
-	ListUnsubscribe bool `json:"list_unsubscribe"`
-	Bulk            bool `json:"bulk"`
-	AutoSubmitted   bool `json:"auto_submitted"`
-	InReplyTo       bool `json:"in_reply_to"`
-	ToOwnerDirectly bool `json:"to_owner_directly"`
-	Links           int  `json:"links"`
-	CalendarLink    bool `json:"calendar_link"`
+	ListUnsubscribe bool   `json:"list_unsubscribe"`
+	Bulk            bool   `json:"bulk"`
+	AutoSubmitted   bool   `json:"auto_submitted"`
+	InReplyTo       bool   `json:"in_reply_to"`
+	ToOwnerDirectly bool   `json:"to_owner_directly"`
+	Links           int    `json:"links"`
+	CalendarLink    bool   `json:"calendar_link"`
 	Mailer          string `json:"mailer,omitempty"`
 }
 
@@ -98,8 +98,8 @@ var Schema = map[string]any{
 			"description": "one sentence, under 160 characters, citing the specific tell",
 		},
 		"relationship_evidence": map[string]any{
-			"type": "string",
-			"enum": []string{RelNone, RelWeak, RelStrong},
+			"type":        "string",
+			"enum":        []string{RelNone, RelWeak, RelStrong},
 			"description": "evidence in the message that sender and recipient already know each other or have ongoing business",
 		},
 	},
