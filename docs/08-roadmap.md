@@ -76,6 +76,13 @@ gate anything.
 
 ## Phase 1: MVP for the owner, shadow mode
 
+**Status 2026-10-13: implemented, not yet run against the live mailbox.** Everything in the
+scope list below exists and has unit tests for the pure stages (normalise, rules, decide,
+LLM parsing, store) and fake-server tests for the Graph and OpenAI-compatible adapters.
+The `promote`/`demote`, `undo`, `allow`/`deny`, feedback scan and `backfill` pieces from
+phase 2 were small enough to land at the same time. The first live exercise is the owner
+running `daakiya init`.
+
 Scope:
 
 - Repository scaffold, lint, test, CI building macOS arm64 and amd64 binaries.

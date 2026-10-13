@@ -27,14 +27,14 @@ flowchart LR
 
 | Package | Responsibility | Depends on |
 |---------|----------------|------------|
-| `cmd/daakiya` | CLI entry points: `init`, `auth`, `run`, `install`, `uninstall`, `status`, `review`, `undo`, `allow`, `deny`, `promote`, `backfill`, `eval`, `export-examples` | everything below |
+| `cmd/daakiya` | CLI entry points: `init`, `auth`, `run`, `install`, `uninstall`, `status`, `review`, `undo`, `allow`, `deny`, `promote`, `demote`, `backfill`, `eval`, `refresh-correspondents`, `classify` | everything below |
 | `internal/mail` | `Mailbox` interface and the Graph implementation: delta sync, fetch, move, categorize, folder and category bootstrap, sent-items scan | `auth`, `store` |
 | `internal/auth` | MSAL public-client flow (device code, loopback browser), token cache persisted to Keychain | `secrets` |
 | `internal/classify` | Pipeline orchestration: normalize, rules, LLM, decide. Owns the taxonomy and the prompt templates (versioned). | `llm`, `store` |
 | `internal/llm` | `Classifier` interface and providers: `anthropic`, `openaicompat`. Structured JSON output with local schema validation. | - |
 | `internal/rules` | Allow/deny lists, known-correspondent set, header heuristics | `store` |
 | `internal/store` | SQLite schema and queries; migrations | - |
-| `internal/secrets` | Keychain read/write | - |
+| `internal/secrets` | Keychain read/write through the `security` CLI (no cgo), with an env-var override | - |
 | `internal/actions` | Translate a decision into mailbox operations; idempotency guard; undo | `mail`, `store` |
 | `internal/feedback` | Detect owner corrections by comparing recorded state with mailbox state; update lists and examples | `mail`, `store` |
 | `internal/launchd` | Write and load the LaunchAgent plist | - |
@@ -98,7 +98,7 @@ type Classifier interface {
   `claude-haiku-5-5`; structured output via the API's JSON schema support; `max_tokens`
   small (classification is a few dozen tokens); low effort setting. Prompt caching on the
   static system prompt and examples so per-message cost is mostly the email itself.
-- `openaicompat`: plain HTTPS client against `{base_url}/v1/chat/completions`, JSON mode
+- `openaicompat`: plain HTTPS client against `{base_url}/chat/completions` (base URL includes `/v1`), JSON mode
   when the server advertises it, otherwise instruct-and-parse. Covers Ollama
   (`http://localhost:11434/v1`), LM Studio, OpenAI, OpenRouter, Groq, and others. Model name
   is free text.
@@ -154,3 +154,16 @@ identity (`microsoft-authentication-library-for-go`); Graph is called over plain
 which is simpler than the generated Graph SDK for the handful of endpoints used.
 This is the one decision most worth confirming with the owner before coding; see
 [ADR 0009](adr/0009-language-and-runtime.md) and [Open questions](09-open-questions.md).
+
+## Implementation notes (2026-10-13)
+
+- Phase 1 is implemented in Go as designed. Package names match the table above except
+  that normalisation and the decision function live in `internal/classify` and the
+  orchestration in `internal/runner`.
+- Decision rows keep the cleaned excerpt and the header signals so `eval` can replay
+  reviewed decisions through a different provider or model on identical input.
+- The in-thread rule uses Graph's `conversationId` matched against conversations found in
+  Sent Items, which is cheaper and more reliable than header matching.
+- `review --mark` is the labelling surface; marking a `cold_outreach` decision wrong runs
+  the same false-positive path as `undo`, so grading and teaching are one action.
+- First run stores a delta cursor and processes nothing; `backfill --since` is explicit.

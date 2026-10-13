@@ -29,7 +29,7 @@ statistics. Release builds are reproducible and the Homebrew formula pins a chec
 | LLM API key | no | yes, as the auth header | Keychain only |
 | Full message (body, attachments, all headers) | read from | **never** | no (only the fields below) |
 | Sender, subject, received time | read from | yes | yes |
-| Body excerpt (cleaned, truncated, default 1,500 chars) | read from | yes | yes, in `examples` only when used as an example; otherwise a hash |
+| Body excerpt (cleaned, truncated, default 1,500 chars) | read from | yes | yes, on the decision row (so `eval` can replay reviewed decisions through another model) and in `examples` when used as an example |
 | Header-derived booleans | computed locally | yes | yes |
 | Owner profile text (role, company, topics) | no | yes, in the system prompt | config file |
 | Decisions, reasons, token counts | no | no | yes |
@@ -98,6 +98,6 @@ from their Microsoft account's app permissions page. The tool documents both ste
 
 ## Logging
 
-Logs contain message IDs, sender domains, categories, confidences, token counts, and
-timings. They do not contain subjects or bodies by default (`log.verbose = true` adds
-subjects for debugging). Logs rotate at 10 MB and keep 5 files.
+Logs contain message IDs, sender addresses, subjects, categories, confidences, token counts,
+and timings, so a run can be audited without opening the database. They never contain
+bodies. Logs rotate at 10 MB and keep 5 files.
