@@ -36,9 +36,9 @@ func (a *Anthropic) Classify(ctx context.Context, sys string, examples []Example
 	// Cache the whole static prefix (system prompt + examples); only the email varies.
 	system[len(system)-1].CacheControl = anthropic.NewCacheControlEphemeralParam()
 
-	resp, err := a.client.Messages.New(ctx, anthropic.MessageNewParams{
+	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
-		MaxTokens: 400,
+		MaxTokens: 1024,
 		System:    system,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(RenderInput(in))),
@@ -47,7 +47,15 @@ func (a *Anthropic) Classify(ctx context.Context, sys string, examples []Example
 			Effort: anthropic.OutputConfigEffortLow,
 			Format: anthropic.JSONOutputFormatParam{Schema: Schema},
 		},
-	})
+	}
+	// Haiku thinks by default and the thinking counts against max_tokens; a label
+	// needs none of it. Disabling is only accepted at effort high or below, which
+	// low satisfies. Other model families reject the disabled setting, so leave
+	// them on adaptive thinking.
+	if strings.Contains(a.model, "haiku") {
+		params.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &anthropic.ThinkingConfigDisabledParam{}}
+	}
+	resp, err := a.client.Messages.New(ctx, params)
 	if err != nil {
 		return Result{}, Usage{}, err
 	}

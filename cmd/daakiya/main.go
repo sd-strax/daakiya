@@ -52,8 +52,8 @@ Operation
   allow <addr|domain>  never treat this sender as cold outreach
   deny <addr|domain>   always treat this sender as cold outreach
   promote | demote     switch between live and shadow mode
-  backfill --since YYYY-MM-DD [--apply]
-                       classify existing Inbox mail (shadow unless --apply in live mode)
+  backfill --since YYYY-MM-DD [--apply] [--redo-unknown]
+                       classify existing Inbox mail; --apply tags (shadow) or moves (live)
   eval [--provider P --model M --base-url U] [--json]
                        score the pipeline against your reviewed decisions
   refresh-correspondents
@@ -682,6 +682,7 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	since := fs.String("since", "", "YYYY-MM-DD")
 	apply := fs.Bool("apply", false, "apply actions (only has effect in live mode)")
 	max := fs.Int("max", 500, "maximum messages")
+	redo := fs.Bool("redo-unknown", false, "also re-run messages whose decision is unknown (e.g. after a provider error)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -705,7 +706,16 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	}
 	var batch []mail.Message
 	for _, m := range msgs {
-		if done, _ := a.st.HasDecision(ctx, m.ID); !done && !m.IsDraft {
+		if m.IsDraft {
+			continue
+		}
+		done, _ := a.st.HasDecision(ctx, m.ID)
+		if done && *redo {
+			if d, found, _ := a.st.GetDecision(ctx, m.ID); found && d.Category == llm.Unknown {
+				done = false
+			}
+		}
+		if !done {
 			batch = append(batch, m)
 		}
 	}
