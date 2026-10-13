@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"sort"
@@ -46,7 +47,7 @@ Setup
 Operation
   run                  one pass: fetch new mail, classify, act, record
   status               last run, counts, mode, spend
-  review [--mark] [-n N] [--unreviewed] [--json]
+  review [--mark] [-n N] [--unreviewed] [--category C] [--sample N] [--json]
                        recent decisions; --mark asks right/wrong per row
   undo <id-prefix>     move a message back to the Inbox and learn from it
   allow <addr|domain>  never treat this sender as cold outreach
@@ -524,13 +525,22 @@ func (a *app) cmdReview(ctx context.Context, args []string) error {
 	n := fs.Int("n", 30, "rows")
 	unreviewed := fs.Bool("unreviewed", false, "only unreviewed LLM decisions")
 	asJSON := fs.Bool("json", false, "JSON lines output")
+	category := fs.String("category", "", "only this category (cold_outreach, marketing, notification, correspondence, unknown)")
+	sample := fs.Int("sample", 0, "with --mark: grade a random sample of this many rows instead of all")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	f := store.DecisionFilter{Limit: *n, Unreviewed: *unreviewed || *mark}
+	f := store.DecisionFilter{Limit: *n, Unreviewed: *unreviewed || *mark, Category: *category}
+	if *sample > 0 {
+		f.Limit = 0
+	}
 	rows, err := a.st.ListDecisions(ctx, f)
 	if err != nil {
 		return err
+	}
+	if *sample > 0 && len(rows) > *sample {
+		rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
+		rows = rows[:*sample]
 	}
 	if *asJSON {
 		return writeJSONLines(a.out, rows)

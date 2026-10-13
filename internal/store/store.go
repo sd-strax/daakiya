@@ -345,6 +345,7 @@ type DecisionFilter struct {
 	OnlyLLMStage bool
 	Reviewed     bool
 	Uncorrected  bool
+	Category     string
 }
 
 func (s *Store) ListDecisions(ctx context.Context, f DecisionFilter) ([]Decision, error) {
@@ -369,6 +370,10 @@ func (s *Store) ListDecisions(ctx context.Context, f DecisionFilter) ([]Decision
 	}
 	if f.Uncorrected {
 		q += ` AND corrected IS NULL`
+	}
+	if f.Category != "" {
+		q += ` AND category = ?`
+		args = append(args, f.Category)
 	}
 	q += ` ORDER BY decided_at DESC`
 	if f.Limit > 0 {
