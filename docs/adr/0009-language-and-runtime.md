@@ -1,10 +1,10 @@
 # ADR 0009: Go, single static binary
 
-Status: accepted (confirmed by owner 2026-10-13). Date: 2026-10-13.
+Status: accepted (confirmed 2026-10-13). Date: 2026-10-13.
 
 ## Context
 
-The tool is a CLI plus a scheduled job, to be run by the owner first and then given to
+The tool is a CLI plus a scheduled job, to be run by the author first and then given to
 others on macOS. The recipients are not necessarily developers. Three realistic choices:
 Go, TypeScript on Node, and Python.
 
@@ -25,7 +25,7 @@ that makes the giveaway work, and Go gives it with the least machinery.
 
 ## Alternatives
 
-TypeScript is the runner-up and would be chosen if the owner is markedly more productive
+TypeScript is the runner-up and would be chosen if the author were markedly more productive
 in it; `bun build --compile` narrows the distribution gap. Python is best kept for the
 spike 2 labelling and comparison scripts, where speed of iteration matters and distribution
 does not.

@@ -20,20 +20,20 @@ first, and the record of why.
 | 6 | [Security and privacy](06-security-and-privacy.md) | What leaves the machine, where secrets live, prompt-injection posture |
 | 7 | [Alternatives considered](07-alternatives-considered.md) | Outlook rules, SpamSieve, Power Automate, add-ins, SaaS, and OpenClaw |
 | 8 | [Roadmap](08-roadmap.md) | Spikes, phases, and the gate between "for me" and "give it away" |
-| 9 | [Open questions](09-open-questions.md) | Decisions still needed from the owner before coding |
+| 9 | [Open questions](09-open-questions.md) | Decisions made before coding, and the few still open |
 | - | [ADRs](adr/README.md) | One file per architectural decision, with status and consequences |
 
 ## Status
 
-Design reviewed with the owner on 2026-10-13 (see [Open questions](09-open-questions.md)).
-Phases 0 and 1 are complete and phase 2 (live mode) has been running on the owner's mailbox
+Design reviewed on 2026-10-13 (see [Open questions](09-open-questions.md)).
+Phases 0 and 1 are complete and phase 2 (live mode) has been running on the author's mailbox
 since 2026-10-13; the [roadmap](08-roadmap.md) carries the measured results. Facts that
 depend on Microsoft or vendor behaviour were checked on 2026-10-13 and are cited where
 they appear; re-verify before release.
 
 ## Conventions
 
-- "Owner" means the person running Daakiya against their own mailbox.
-- "Provider" means an LLM API or local inference server the owner configures.
+- "You" means the person running Daakiya against their own mailbox; "the author" is the person who wrote it.
+- "Provider" means an LLM API or local inference server you configure.
 - "Decision" means one classification result for one message, stored locally.
 - Dates are absolute (ISO 8601). Relative phrases like "next month" are avoided.

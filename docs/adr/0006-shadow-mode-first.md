@@ -5,15 +5,15 @@ Status: accepted. Date: 2026-10-13.
 ## Context
 
 Trust in an automated filer is earned by watching it be right. Small models and new
-prompts should not be allowed to move mail until their precision on the owner's actual
+prompts should not be allowed to move mail until their precision on your actual
 inbox is known.
 
 ## Decision
 
 After `init` the tool is in shadow mode: it runs the full pipeline, records every decision,
-and optionally tags would-be-moved messages with an Outlook category so the owner can audit
+and optionally tags would-be-moved messages with an Outlook category so you can audit
 from inside Outlook, but it moves nothing. `promote` switches to live mode; `demote`
-switches back. The documented gate for the owner's own promotion is precision at or above
+switches back. The documented gate for the author's own promotion is precision at or above
 0.98 and recall at or above 0.80 on `cold_outreach` over at least 200 reviewed decisions,
 measured with `eval` and `review`.
 

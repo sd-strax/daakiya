@@ -5,7 +5,7 @@ Status: accepted. Date: 2026-10-13.
 ## Context
 
 The cost asymmetry is severe: a missed cold email costs seconds; a lost real email can
-cost a customer or a job. The tool runs unattended, so every action must be one the owner
+cost a customer or a job. The tool runs unattended, so every action must be one you
 can discover and reverse later without help.
 
 ## Decision
@@ -23,10 +23,10 @@ move everything in the Daakiya folder back to the Inbox.
 
 - Delete after N days: convenient, irreversible, rejected for v1. If ever added it gets its
   own ADR and is off by default.
-- Report as junk: irreversible side effects beyond the owner's mailbox.
-- Mark as read: hides the folder's unread count, which is the owner's main audit cue.
+- Report as junk: irreversible side effects beyond your mailbox.
+- Mark as read: hides the folder's unread count, which is your main audit cue.
 
 ## Consequences
 
-- The Daakiya folder grows until the owner clears it; that is acceptable and visible.
+- The Daakiya folder grows until you clear it; that is acceptable and visible.
 - Any feature that needs a non-reversible action needs a new ADR first.

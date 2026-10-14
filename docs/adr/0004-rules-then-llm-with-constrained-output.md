@@ -21,7 +21,7 @@ object and maps category plus confidence to an action using thresholds from conf
 ## Alternatives rejected
 
 - LLM on every message: several times the cost, more data leaving the machine, and it
-  wastes the owner's own strongest signal (who they already correspond with).
+  wastes your own strongest signal (who you already correspond with).
 - Agentic loop with mailbox tools: moves the action decision into the model, which is the
   component reading untrusted input. See ADR 0011.
 - Rules only: cannot judge intent; this is the status quo that failed.

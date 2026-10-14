@@ -4,7 +4,7 @@ Status: accepted. Date: 2026-10-13.
 
 ## Context
 
-The owner reads mail in Outlook for Mac against a Microsoft mailbox. The tool needs to see
+You read mail in Outlook for Mac against a Microsoft mailbox. The tool needs to see
 new messages and move or tag them. Candidate access paths:
 
 1. Script Outlook for Mac itself (AppleScript / JXA).
@@ -28,7 +28,7 @@ Facts checked 2026-10-13:
 ## Decision
 
 Use Microsoft Graph with delegated permissions (`Mail.ReadWrite`, `MailboxSettings.ReadWrite`,
-`User.Read`, `offline_access`) obtained through a public-client OAuth flow in the owner's
+`User.Read`, `offline_access`) obtained through a public-client OAuth flow in your
 own app registration. Treat Outlook for Mac purely as a viewer of the result.
 
 ## Alternatives rejected
@@ -42,7 +42,7 @@ own app registration. Treat Outlook for Mac purely as a viewer of the result.
 
 ## Consequences
 
-- Works whether Outlook is running or not, and from any machine the owner chooses.
+- Works whether Outlook is running or not, and from any machine you choose.
 - Requires an Entra app registration (see ADR 0002) and is exposed to tenant consent
   policy; spike 1 in the roadmap tests this before any code.
 - The `Mailbox` interface is kept adapter-shaped so Gmail or IMAP can be added later.

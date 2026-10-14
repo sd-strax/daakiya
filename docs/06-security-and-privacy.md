@@ -4,7 +4,7 @@
 
 ```
 +-------------------------------------------------------------+
-| Owner's Mac (trusted)                                        |
+| Your Mac (trusted)                                           |
 |   daakiya binary, config, SQLite, log                        |
 |   Keychain: LLM API key, MSAL refresh token                  |
 +------------------+------------------------------+-----------+
@@ -12,9 +12,9 @@
          HTTPS, OAuth 2.0 delegated      HTTPS (or localhost)
                    |                              |
       +------------v-----------+     +------------v-------------+
-      | Microsoft Graph        |     | LLM provider the owner   |
-      | (owner's own mailbox,  |     | chose: Anthropic API,    |
-      |  owner's own consent)  |     | Ollama, OpenAI-compat... |
+      | Microsoft Graph        |     | LLM provider you chose:  |
+      | (your own mailbox,     |     | Anthropic API, Ollama,   |
+      |  your own consent)     |     | any OpenAI-compatible    |
       +------------------------+     +--------------------------+
 ```
 
@@ -31,12 +31,12 @@ statistics. Release builds are reproducible and the Homebrew formula pins a chec
 | Sender, subject, received time | read from | yes | yes |
 | Body excerpt (cleaned, truncated, default 1,500 chars) | read from | yes | yes, on the decision row (so `eval` can replay reviewed decisions through another model) and in `examples` when used as an example |
 | Header-derived booleans | computed locally | yes | yes |
-| Owner profile text (role, company, topics) | no | yes, in the system prompt | config file |
+| Your profile text (role, company, topics) | no | yes, in the system prompt | config file |
 | Decisions, reasons, token counts | no | no | yes |
 
 Optional redaction (`privacy.redact = true`): email addresses, phone numbers, and URLs in
 the body excerpt are replaced with placeholders before the excerpt goes to the provider.
-The sender address is kept because it is the strongest signal. For owners who want nothing
+The sender address is kept because it is the strongest signal. If you want nothing
 to leave the machine, a local model via Ollama makes the LLM column entirely local, and
 the tool points this out during `init`.
 
@@ -51,10 +51,10 @@ the tool points this out during `init`.
   more than the `security` helper can pass safely, so it is stored as an AES-GCM encrypted
   file in the data directory with a random 32-byte key held in the Keychain. The file alone
   is useless; `uninstall --revoke` deletes both. Scopes are the minimum that allows
-  reading, moving, and tagging mail in the owner's own mailbox. Application permissions
+  reading, moving, and tagging mail in your own mailbox. Application permissions
   (tenant-wide, no user) are never used.
-- **Entra app registration** belongs to the owner. The tool cannot act on any mailbox the
-  owner has not personally signed into. See [ADR 0002](adr/0002-byok-and-byo-app-registration.md).
+- **Entra app registration** belongs to you. The tool cannot act on any mailbox you
+  have not personally signed into. See [ADR 0002](adr/0002-byok-and-byo-app-registration.md).
 
 ## Prompt injection posture
 
@@ -72,7 +72,7 @@ Mitigations, in order of importance:
 2. **Output is schema-validated locally.** Anything that is not a valid object with a
    known enum value is `unknown`, which has no action.
 3. **The only action is reversible.** A successful injection moves one email to a folder
-   the owner looks at. See [ADR 0005](adr/0005-reversible-actions-only.md).
+   you look at. See [ADR 0005](adr/0005-reversible-actions-only.md).
 4. **The system prompt names the threat** and tells the model to treat the body as data.
    This helps against casual attempts; it is not relied upon.
 5. **The reason field is displayed, never executed or interpreted.** `review` prints it as
@@ -83,10 +83,10 @@ This is the main argument against building this on a general agent framework; se
 
 ## Blast radius if the Mac is compromised
 
-An attacker with the owner's user session can read the Keychain items the same way the
-tool does. They would get an LLM API key (owner should set a spend limit at the provider)
-and a refresh token scoped to `Mail.ReadWrite` on one mailbox, which the owner can revoke
-from their Microsoft account's app permissions page. The tool documents both steps in
+An attacker with your user session can read the Keychain items the same way the tool
+does. They would get an LLM API key (set a spend limit at the provider) and a refresh
+token scoped to `Mail.ReadWrite` on one mailbox, which you can revoke from your Microsoft
+account's app permissions page. The tool documents both steps in
 `daakiya uninstall --revoke` and in the setup guide.
 
 ## Supply chain
@@ -95,7 +95,7 @@ from their Microsoft account's app permissions page. The tool documents both ste
   authentication library, a SQLite driver, a TOML parser, and a Keychain binding. Graph is
   called over the standard library HTTP client.
 - `go.sum` (or the equivalent lockfile) committed; dependency updates reviewed by hand.
-- Release binaries signed with the owner's Developer ID and notarized so Gatekeeper does
+- Release binaries signed with the author's Developer ID and notarized so Gatekeeper does
   not block them; checksums published alongside.
 
 ## Logging

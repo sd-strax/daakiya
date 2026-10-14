@@ -16,7 +16,7 @@ short-lived process many times a day with no server.
   `daakiya`. Environment-variable override for the key for people who manage secrets
   differently.
 - **TOML** at `~/.config/daakiya/config.toml` for everything non-secret: provider, model,
-  base URL, thresholds, actions, mode, caps, privacy flags, owner profile text.
+  base URL, thresholds, actions, mode, caps, privacy flags, your profile text.
 
 ## Alternatives rejected
 
@@ -28,5 +28,5 @@ short-lived process many times a day with no server.
 ## Consequences
 
 - macOS-specific secret storage; other hosts need an adapter (phase 4).
-- `status` and `review` are thin queries over SQLite; owners can run their own.
+- `status` and `review` are thin queries over SQLite; you can run your own.
 - Backups are one directory plus one Keychain export; documented in the guide.

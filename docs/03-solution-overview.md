@@ -1,6 +1,6 @@
 # 3. Solution overview
 
-Daakiya is a command-line tool and background job that runs on the owner's Mac. Every few
+Daakiya is a command-line tool and background job that runs on your Mac. Every few
 minutes it asks Microsoft Graph for messages that arrived in the Inbox since the last run,
 decides for each whether it is cold outreach, and moves the ones that are into a dedicated
 folder. Outlook for Mac, which syncs from the same mailbox, shows the result without being
@@ -9,14 +9,14 @@ involved in producing it.
 ```
    Outlook for Mac  <----sync----  Microsoft 365 / Outlook.com mailbox
                                              ^
-                                             | Microsoft Graph (delegated, owner's own consent)
+                                             | Microsoft Graph (delegated, your own consent)
                                              v
                                    +--------------------+
    launchd (every 5 min) -------->  |  daakiya run        |
                                    |                    |
                                    |  1. fetch delta     |
                                    |  2. rules           |
-                                   |  3. LLM (if needed) |---> owner's LLM provider
+                                   |  3. LLM (if needed) |---> your LLM provider
                                    |  4. decide + act    |     (Anthropic API, Ollama,
                                    |  5. record          |      any OpenAI-compatible)
                                    +--------------------+
@@ -36,7 +36,7 @@ involved in producing it.
    See [ADR 0001](adr/0001-mailbox-access-via-microsoft-graph.md).
 
 2. **Rules first, model second.** Most mail can be settled without a model: replies in a
-   thread the owner started, mail from people the owner has written to, allowlisted
+   thread you started, mail from people you have written to, allowlisted
    domains, obviously automated notifications. The LLM sees only the remainder, which keeps
    cost, latency, and exposure low. See [ADR 0004](adr/0004-rules-then-llm-with-constrained-output.md).
 
@@ -52,11 +52,11 @@ involved in producing it.
    See [ADR 0005](adr/0005-reversible-actions-only.md) and [ADR 0006](adr/0006-shadow-mode-first.md).
 
 5. **Bring your own key, and your own app registration.** The tool holds no credentials of
-   its own. The owner supplies an LLM endpoint and key (or a local model), and an Entra
-   app client ID they registered themselves. Nothing phones home.
+   its own. You supply an LLM endpoint and key (or a local model), and an Entra app
+   client ID you registered yourself. Nothing phones home.
    See [ADR 0002](adr/0002-byok-and-byo-app-registration.md).
 
-## What the owner experiences
+## What using it looks like
 
 ```
 $ brew install sdas/tap/daakiya          # at release; before that, a built binary

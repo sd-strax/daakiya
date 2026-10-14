@@ -4,7 +4,7 @@ Status: accepted. Date: 2026-10-13.
 
 ## Context
 
-The owner asked whether OpenClaw, a self-hosted agent gateway with a scheduler, skills, and
+The author asked whether OpenClaw, a self-hosted agent gateway with a scheduler, skills, and
 tool access, could do this more easily. It could do it quickly: a skill, a Graph
 connection, and a heartbeat would produce a working triage agent without new code. The
 full comparison is in [Alternatives considered](../07-alternatives-considered.md).
@@ -13,7 +13,7 @@ full comparison is in [Alternatives considered](../07-alternatives-considered.md
 
 Build a narrow, deterministic pipeline (ADR 0004) as a standalone CLI, and do not build on
 OpenClaw or any general agent framework. Expose the CLI, and later a small MCP server, so
-such frameworks can drive the tool from the outside if the owner wants a chat interface.
+such frameworks can drive the tool from the outside if you want a chat interface.
 
 ## Reasons
 

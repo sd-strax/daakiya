@@ -4,7 +4,7 @@ Status: accepted. Date: 2026-10-13.
 
 ## Context
 
-BYOK means the tool must work with whatever model the owner has: a hosted API (the owner
+BYOK means the tool must work with whatever model you have: a hosted API (the author
 named Claude Haiku as the obvious choice), or a self-hosted small model via Ollama or LM
 Studio. Supporting every vendor SDK is not viable for a one-person project. Most local
 servers and many hosted vendors expose an OpenAI-compatible chat completions endpoint.
@@ -32,7 +32,7 @@ into an estimated cost for `status`.
 
 ## Consequences
 
-- Owners of OpenAI, OpenRouter, Groq, Mistral, Gemini-via-compat, and local models are
+- Users of OpenAI, OpenRouter, Groq, Mistral, Gemini-via-compat, and local models are
   all covered by the second adapter without code changes.
 - Confidence calibration differs across models; thresholds are per provider/model in
   config and chosen with `eval`.

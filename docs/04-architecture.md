@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    subgraph mac[Owner's Mac]
+    subgraph mac[Your Mac]
         launchd[launchd<br/>StartInterval 300s]
         cli[daakiya CLI<br/>single binary]
         store[(SQLite<br/>decisions, sync state,<br/>lists, examples)]
@@ -36,7 +36,7 @@ flowchart LR
 | `internal/store` | SQLite schema and queries; migrations | - |
 | `internal/secrets` | Keychain read/write through the `security` CLI (no cgo), with an env-var override | - |
 | `internal/actions` | Translate a decision into mailbox operations; idempotency guard; undo | `mail`, `store` |
-| `internal/feedback` | Detect owner corrections by comparing recorded state with mailbox state; update lists and examples | `mail`, `store` |
+| `internal/feedback` | Detect your corrections by comparing recorded state with mailbox state; update lists and examples | `mail`, `store` |
 | `internal/launchd` | Write and load the LaunchAgent plist | - |
 
 Interfaces that must stay stable so adapters can be added later (N9):
@@ -81,8 +81,8 @@ type Classifier interface {
 
 | Concern | Choice |
 |---------|--------|
-| Auth flow | Public client (no secret), delegated permissions, MSAL. Default to device code flow because it works in a terminal and under launchd-initiated re-auth prompts; offer browser loopback as an option. Authority defaults to `https://login.microsoftonline.com/common` so both work and personal accounts work at release; the owner's own install pins their work tenant ID, which avoids the account-picker and makes consent errors specific. |
-| Tenant posture | The owner's mailbox is in a work tenant they do not administer. Both app registration and `Mail.ReadWrite` consent may be restricted; spike 1 tests both before any code. If registration is blocked, IT creates the registration and the owner only needs the client ID. If consent is blocked, IT grants admin consent once via the admin-consent URL the setup guide will print. |
+| Auth flow | Public client (no secret), delegated permissions, MSAL. Default to device code flow because it works in a terminal and under launchd-initiated re-auth prompts; offer browser loopback as an option. Authority defaults to `https://login.microsoftonline.com/common` so both work and personal accounts work at release; pinning your own tenant ID avoids the account picker and makes consent errors specific. |
+| Tenant posture | The author's mailbox is in a work tenant they do not administer. Both app registration and `Mail.ReadWrite` consent may be restricted; spike 1 tests both before any code. If registration is blocked, IT creates the registration and you only need the client ID. If consent is blocked, IT grants admin consent once via the admin-consent URL the setup guide will print. |
 | Scopes | `Mail.ReadWrite` (read, move, set categories), `MailboxSettings.ReadWrite` (create the master category so it has a colour in Outlook), `User.Read`, `offline_access`. No application permissions, ever. |
 | Change detection | `GET /me/mailFolders/inbox/messages/delta` with `$select` limited to the fields the pipeline needs. Store the `deltaLink` in SQLite. Delta returns moved-out messages as removals, which the feedback scan also uses. |
 | Message identity | Request `Prefer: IdType="ImmutableId"` on every call so IDs survive moves between folders. Store `internetMessageId` as a secondary key for exports and cross-checks. See [ADR 0010](adr/0010-stable-message-identity.md). |
@@ -103,7 +103,7 @@ type Classifier interface {
   (`http://localhost:11434/v1`), LM Studio, OpenAI, OpenRouter, Groq, and others. Model name
   is free text.
 - Both return the same `Result` struct and the same `Usage` struct (input tokens, output
-  tokens, estimated cost from a small per-model price table the owner can override).
+  tokens, estimated cost from a small per-model price table you can override).
 - Output is validated locally against the schema regardless of provider. Invalid or
   missing output is treated as `unknown` with confidence 0, never as a positive.
 
@@ -143,7 +143,7 @@ examples(id INTEGER PK, category TEXT, from_domain TEXT, subject TEXT, excerpt T
 | Graph 5xx or network down | Retry with backoff within the run; give up and leave the cursor unchanged so the next run retries the same messages. |
 | LLM provider down or over budget | Message recorded as `deferred`; retried on the next run up to 3 times, then recorded as `unknown`. Never moved. |
 | Malformed LLM output | Recorded as `unknown`, reason "invalid output", counted in `status`. |
-| Folder deleted by owner | Bootstrap recreates it on the next run and logs. |
+| Folder deleted by hand | Bootstrap recreates it on the next run and logs. |
 | Two runs overlap | Lock file; second run exits immediately. |
 
 ## Language and runtime
@@ -152,7 +152,7 @@ Proposed: Go, producing a single static binary for macOS (arm64 and amd64), dist
 via a Homebrew tap. Official SDKs exist for Anthropic (`anthropic-sdk-go`) and Microsoft
 identity (`microsoft-authentication-library-for-go`); Graph is called over plain REST,
 which is simpler than the generated Graph SDK for the handful of endpoints used.
-This is the one decision most worth confirming with the owner before coding; see
+This was the one decision most worth confirming before coding; see
 [ADR 0009](adr/0009-language-and-runtime.md) and [Open questions](09-open-questions.md).
 
 ## Implementation notes (2026-10-13)

@@ -1,7 +1,7 @@
 # Architecture decision records
 
 One file per decision. Format: context, decision, alternatives, consequences, status.
-Statuses: `proposed` (awaiting owner confirmation), `accepted`, `superseded by NNNN`. All eleven are accepted as of 2026-10-13.
+Statuses: `proposed` (awaiting confirmation), `accepted`, `superseded by NNNN`. All eleven are accepted as of 2026-10-13.
 
 | ADR | Title | Status |
 |-----|-------|--------|

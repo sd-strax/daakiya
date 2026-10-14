@@ -1,6 +1,6 @@
 # 7. Alternatives considered
 
-Each alternative is judged against the owner's constraints: works with Outlook for Mac on a
+Each alternative is judged against the project's constraints: works with Outlook for Mac on a
 Microsoft mailbox, bring your own key, buildable by one person, releasable to others,
 reversible, and cheap.
 
@@ -9,7 +9,7 @@ reversible, and cheap.
 | Option | Can judge intent? | Runs unattended? | BYOK? | Releasable? | Verdict |
 |--------|-------------------|------------------|-------|-------------|---------|
 | Outlook rules / Sweep | No | Yes | n/a | n/a | Keep as a complement for fixed senders; cannot solve the core problem |
-| Focused Inbox / Clutter | Partly, opaque | Yes | n/a | n/a | Already failing for the owner |
+| Focused Inbox / Clutter | Partly, opaque | Yes | n/a | n/a | Already failing on the author's inbox |
 | SpamSieve or similar Bayesian plug-ins | Partly | Yes | n/a | Third-party product | Requires AppleScript, which the new Outlook for Mac does not have |
 | Power Automate flow calling an LLM | Yes | Yes | Awkward | Only to M365 users with premium licences | Wrong licensing and trust model for a giveaway |
 | Outlook add-in (Office.js) | Yes | **No** | Yes | Yes, via AppSource or sideload | No event for incoming mail; possible later as a feedback UI |
@@ -19,11 +19,11 @@ reversible, and cheap.
 
 ## Outlook rules and Sweep
 
-Rules match on sender, recipients, subject words, and a few headers. The owner's problem is
+Rules match on sender, recipients, subject words, and a few headers. The problem here is
 a category of mail with rotating senders and personalised subjects, so there is no pattern
 to match. Rules remain useful for the deterministic part of the pipeline (for example,
 routing `linkedin.com` notifications), and Daakiya's rule stage deliberately covers the
-same ground so the owner does not need to maintain both.
+same ground so you do not need to maintain both.
 
 ## SpamSieve and Bayesian plug-ins
 
@@ -39,10 +39,9 @@ mail.
 
 A flow triggered "when a new email arrives" could post the message to an LLM and move it.
 Problems: the HTTP action needed to call an arbitrary LLM is a premium connector; the
-flow, and the owner's LLM key, live in Microsoft's cloud rather than on the owner's
-machine; personal Outlook.com accounts have a different connector; and giving this away
+flow, and your LLM key, live in Microsoft's cloud rather than on your machine; personal Outlook.com accounts have a different connector; and giving this away
 means giving away a flow template that each recipient must licence. It also cannot call a
-local model on the owner's Mac. Reasonable for an enterprise with a Power Platform licence,
+local model on your Mac. Reasonable for an enterprise with a Power Platform licence,
 wrong for this project.
 
 ## Outlook add-in (Office.js)
@@ -57,12 +56,12 @@ roadmap as a maybe.
 ## Mail-triage SaaS
 
 Products like SaneBox do roughly this, well, for a subscription, by holding IMAP or Graph
-credentials to the mailbox on their servers. That is the opposite of the owner's BYOK and
+credentials to the mailbox on their servers. That is the opposite of this project's BYOK and
 self-hosted constraints, and it is not something to give away.
 
 ## OpenClaw
 
-The owner asked whether OpenClaw could handle this more easily. Assessment, based on the
+The author asked whether OpenClaw could handle this more easily. Assessment, based on the
 official docs (docs.openclaw.ai) and third-party guides checked 2026-10-13:
 
 **What it is.** A self-hosted, MIT-licensed gateway that connects chat apps to AI agents,
@@ -78,7 +77,7 @@ asking it to triage.
 - A chat interface for free: "what did you file today?" and "put that one back" are
   natural.
 - Extensible to drafting replies, summarising, and other inbox tasks later.
-- If the owner already runs OpenClaw for other things, it is one more job in an existing
+- If you already run OpenClaw for other things, it is one more job in an existing
   system.
 
 **Where it is a worse fit for this problem.**

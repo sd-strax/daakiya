@@ -2,11 +2,11 @@
 
 ## The symptom
 
-The owner uses Outlook for Mac against a Microsoft mailbox. Every day the inbox receives a
+You read mail in Outlook for Mac against a Microsoft mailbox. Every day the inbox receives a
 steady stream of cold outreach: sales development reps, recruiters, agencies, "quick
 question" openers, follow-up chains ("bumping this to the top of your inbox"), and
 LinkedIn-style marketing. None of it is spam in the classic sense. It is addressed to the
-owner by name, often references their company or title, comes from real domains with valid
+you by name, often references your company or title, comes from real domains with valid
 SPF and DKIM, and is sent by humans or tools imitating humans.
 
 The result is that the inbox stops being a to-do list. Real mail from colleagues,
@@ -35,27 +35,27 @@ roughly 700 input tokens and 60 output tokens to classify costs about one hundre
 cent. One hundred messages a day is about a cent a day. A local model costs nothing per
 message.
 
-## Constraints the owner has stated
+## Constraints
 
 1. **Bring your own key.** The tool must not ship with, proxy, or bill for any LLM access.
-   The owner configures a provider (a hosted API key, or a local inference server such as
+   You configure a provider (a hosted API key, or a local inference server such as
    Ollama) and the tool uses it.
 2. **Build for one, then give away.** The first deliverable is a working tool for the
-   owner's own mailbox. If it works, it should be releasable to other people with minimal
+   author's own mailbox. If it works, it should be releasable to other people with minimal
    change, which rules out designs that only work for one tenant or one account type.
-3. **Outlook for Mac is the client.** The owner reads mail there and wants the result to
+3. **Outlook for Mac is the client.** You read mail there and want the result to
    show up there. The tool does not have to run inside Outlook; it has to produce an
    effect Outlook displays.
 
 ## What success looks like
 
-- Cold outreach leaves the inbox within a few minutes of arriving, without the owner
-  doing anything.
-- Nothing the owner cares about is ever lost. Mistakes are visible and reversible in one
+- Cold outreach leaves the inbox within a few minutes of arriving, without you doing
+  anything.
+- Nothing you care about is ever lost. Mistakes are visible and reversible in one
   action.
-- After a two-week shadow period, during which the owner's only job is to glance at a
+- After a two-week shadow period, during which your only job is to glance at a
   review table and mark rows right or wrong, measured precision on "cold outreach" is high enough
-  that the owner is comfortable letting the tool move mail (target: 98 percent or better
+  that you are comfortable letting the tool move mail (target: 98 percent or better
   precision, see [Requirements](02-requirements.md)).
 - A second person can install it, point it at their own mailbox and their own model, and
-  get the same result without the owner's help.
+  get the same result without the author's help.
