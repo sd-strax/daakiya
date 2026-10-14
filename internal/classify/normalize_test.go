@@ -24,7 +24,7 @@ func TestRegistrableDomain(t *testing.T) {
 }
 
 func TestCleanBodyDropsQuotesAndSignature(t *testing.T) {
-	body := "Hi Sudeep,\n\nQuick question about your outbound strategy. We help teams book meetings.\nWould you be open to a 15 minute call?\n\nThanks,\nJoe\nSales Rep\n\nOn Mon, Oct 13, 2026 at 9:00 AM Sudeep Das <s@x.com> wrote:\n> old stuff\n> more old stuff\n"
+	body := "Hi Sam,\n\nQuick question about your outbound strategy. We help teams book meetings.\nWould you be open to a 15 minute call?\n\nThanks,\nJoe\nSales Rep\n\nOn Mon, Oct 13, 2026 at 9:00 AM Sam Owner <owner@example.com> wrote:\n> old stuff\n> more old stuff\n"
 	got := CleanBody(body, 1500, false)
 	if strings.Contains(got, "old stuff") {
 		t.Errorf("quoted text not removed: %q", got)
@@ -54,7 +54,7 @@ func TestCleanBodyTruncatesAndRedacts(t *testing.T) {
 func TestNormalizeSignals(t *testing.T) {
 	m := mail.Message{
 		From:     mail.Address{Name: "Joe", Address: "Joe@Mail.Growth.IO"},
-		To:       []mail.Address{{Address: "sudeep@hypredge.com"}},
+		To:       []mail.Address{{Address: "owner@example.com"}},
 		Subject:  " Quick question ",
 		BodyHTML: `<html><head><style>p{}</style></head><body><p>Hi there,</p><p>Book time: <a href="https://calendly.com/joe/15min">here</a></p><img src="x" width="1" height="1"></body></html>`,
 		Headers: map[string][]string{
@@ -63,7 +63,7 @@ func TestNormalizeSignals(t *testing.T) {
 			"x-mailer":         {"HubSpot Marketing/1.2 (Foo)"},
 		},
 	}
-	n := Normalize(m, Options{MaxBodyChars: 500, OwnerAddrs: map[string]bool{"sudeep@hypredge.com": true}})
+	n := Normalize(m, Options{MaxBodyChars: 500, OwnerAddrs: map[string]bool{"owner@example.com": true}})
 	if n.FromAddr != "joe@mail.growth.io" || n.FromDomain != "growth.io" || n.FromLocal != "joe" {
 		t.Errorf("from parsing wrong: %+v", n)
 	}
