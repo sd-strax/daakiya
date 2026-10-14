@@ -25,8 +25,11 @@ first, and the record of why.
 
 ## Status
 
-Design phase, decisions reviewed with the owner on 2026-10-13 (see [Open questions](09-open-questions.md)). Spike 1 (Graph consent) passed on 2026-10-13; see the roadmap. No product code exists yet, only the spike script under `scripts/`. Facts that depend on Microsoft or vendor behaviour
-were checked on 2026-10-13 and are cited where they appear; re-verify before release.
+Design reviewed with the owner on 2026-10-13 (see [Open questions](09-open-questions.md)).
+Phases 0 and 1 are complete and phase 2 (live mode) has been running on the owner's mailbox
+since 2026-10-13; the [roadmap](08-roadmap.md) carries the measured results. Facts that
+depend on Microsoft or vendor behaviour were checked on 2026-10-13 and are cited where
+they appear; re-verify before release.
 
 ## Conventions
 
