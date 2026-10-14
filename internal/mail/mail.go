@@ -67,6 +67,9 @@ type Mailbox interface {
 	InboxCount(ctx context.Context) (int, error)
 	// ListInboxSince lists Inbox messages received after since (for backfill).
 	ListInboxSince(ctx context.Context, since time.Time, max int) ([]Message, error)
+	// WalkInboxSince streams Inbox messages received after since, one page at a
+	// time, newest first. fn returns false to stop early.
+	WalkInboxSince(ctx context.Context, since time.Time, pageSize int, fn func(page []Message) (bool, error)) error
 	// ListFolder lists messages currently in a folder.
 	ListFolder(ctx context.Context, folderID string, max int) ([]Message, error)
 	Move(ctx context.Context, id, destFolderID string) (newID string, err error)

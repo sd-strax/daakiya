@@ -211,7 +211,9 @@ func (a *app) mailbox() (mail.Mailbox, *auth.Authenticator, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return graph.New(au), au, nil
+	g := graph.New(au)
+	g.Log = a.logf
+	return g, au, nil
 }
 
 func (a *app) classifier(override *llmOverride) (llm.Classifier, error) {
@@ -743,37 +745,55 @@ func (a *app) cmdBackfill(ctx context.Context, args []string) error {
 	if err := r.LoadFolders(ctx); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "listing inbox since %s...\n", *since)
-	msgs, err := r.Mailbox.ListInboxSince(ctx, t, *max)
-	if err != nil {
-		return err
-	}
-	var batch []mail.Message
-	for _, m := range msgs {
-		if m.IsDraft {
-			continue
-		}
-		done, _ := a.st.HasDecision(ctx, m.ID)
-		if done && *redo {
-			if d, found, _ := a.st.GetDecision(ctx, m.ID); found && d.Category == llm.Unknown {
-				done = false
+	fmt.Fprintf(os.Stderr, "walking inbox since %s, newest first (Ctrl-C to stop; rerun to resume)\n", *since)
+	var seen, queued int
+	var total runner.ProcessResult
+	start := time.Now()
+	err = r.Mailbox.WalkInboxSince(ctx, t, 100, func(page []mail.Message) (bool, error) {
+		var batch []mail.Message
+		for _, m := range page {
+			seen++
+			if m.IsDraft {
+				continue
 			}
-		}
-		if done && *reroute {
-			for _, rt := range a.cfg.Routes {
-				if rules.MatchRoute(rules.Route{Match: rt.Match, Folder: rt.Folder}, m.From.Address) {
+			done, _ := a.st.HasDecision(ctx, m.ID)
+			if done && *redo {
+				if d, found, _ := a.st.GetDecision(ctx, m.ID); found && d.Category == llm.Unknown {
 					done = false
 				}
 			}
+			if done && *reroute {
+				for _, rt := range a.cfg.Routes {
+					if rules.MatchRoute(rules.Route{Match: rt.Match, Folder: rt.Folder}, m.From.Address) {
+						done = false
+					}
+				}
+			}
+			if !done {
+				batch = append(batch, m)
+			}
 		}
-		if !done {
-			batch = append(batch, m)
+		queued += len(batch)
+		res := r.Process(ctx, batch, *apply)
+		total.Rules += res.Rules
+		total.LLM += res.LLM
+		total.WouldMove += res.WouldMove
+		total.Moved += res.Moved
+		total.Errors += res.Errors
+		var oldest string
+		if len(page) > 0 {
+			oldest = page[len(page)-1].ReceivedAt.Local().Format("2006-01-02")
 		}
-	}
-	fmt.Fprintf(os.Stderr, "%d messages since %s, %d not yet classified\n", len(msgs), *since, len(batch))
-	res := r.Process(ctx, batch, *apply)
-	fmt.Fprintf(os.Stderr, "done: %d rule, %d llm, %d would-move, %d moved, %d errors\n", res.Rules, res.LLM, res.WouldMove, res.Moved, res.Errors)
-	return nil
+		fmt.Fprintf(os.Stderr, "-- %d listed, %d classified (%d rule, %d llm, %d moved, %d errors), back to %s, %s elapsed\n",
+			seen, queued, total.Rules, total.LLM, total.Moved, total.Errors, oldest, time.Since(start).Round(time.Second))
+		if *max > 0 && seen >= *max {
+			return false, nil
+		}
+		return ctx.Err() == nil, nil
+	})
+	fmt.Fprintf(os.Stderr, "done: %d listed, %d classified: %d rule, %d llm, %d would-move, %d moved, %d errors\n",
+		seen, queued, total.Rules, total.LLM, total.WouldMove, total.Moved, total.Errors)
+	return err
 }
 
 func (a *app) cmdClassify(ctx context.Context, args []string) error {

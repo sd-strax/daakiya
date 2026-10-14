@@ -29,6 +29,8 @@ type Client struct {
 	tokens TokenSource
 	http   *http.Client
 	base   string
+	// Log, when set, receives notes about retries and throttling.
+	Log func(format string, args ...any)
 }
 
 func New(tokens TokenSource) *Client {
@@ -100,6 +102,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 				}
 			}
 			if attempt < 4 {
+				if c.Log != nil {
+					c.Log("graph: HTTP %d on %s, waiting %s before retry %d", resp.StatusCode, method+" "+shortPath(u), wait, attempt+1)
+				}
 				sleep(ctx, wait)
 				backoff *= 2
 				continue
@@ -122,6 +127,13 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		return nil
 	}
 	return errors.New("graph: retries exhausted")
+}
+
+func shortPath(u string) string {
+	if i := strings.Index(u, "?"); i > 0 {
+		u = u[:i]
+	}
+	return strings.TrimPrefix(u, defaultBase)
 }
 
 func sleep(ctx context.Context, d time.Duration) {
@@ -410,13 +422,40 @@ func (c *Client) InboxCount(ctx context.Context) (int, error) {
 	return f.TotalItemCount, nil
 }
 
-func (c *Client) ListInboxSince(ctx context.Context, since time.Time, max int) ([]mail.Message, error) {
+func inboxQuery(since time.Time, pageSize int) string {
 	q := url.Values{}
 	q.Set("$select", listSelect)
 	q.Set("$filter", "receivedDateTime ge "+since.UTC().Format(time.RFC3339))
 	q.Set("$orderby", "receivedDateTime desc")
-	q.Set("$top", "50")
-	return c.listMessages(ctx, "/me/mailFolders/inbox/messages?"+q.Encode(), max)
+	q.Set("$top", strconv.Itoa(pageSize))
+	return "/me/mailFolders/inbox/messages?" + q.Encode()
+}
+
+func (c *Client) ListInboxSince(ctx context.Context, since time.Time, max int) ([]mail.Message, error) {
+	return c.listMessages(ctx, inboxQuery(since, 100), max)
+}
+
+func (c *Client) WalkInboxSince(ctx context.Context, since time.Time, pageSize int, fn func([]mail.Message) (bool, error)) error {
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+	next := inboxQuery(since, pageSize)
+	for next != "" {
+		var p page
+		if err := c.do(ctx, http.MethodGet, next, nil, &p); err != nil {
+			return err
+		}
+		msgs := make([]mail.Message, 0, len(p.Value))
+		for _, w := range p.Value {
+			msgs = append(msgs, w.toMessage())
+		}
+		cont, err := fn(msgs)
+		if err != nil || !cont {
+			return err
+		}
+		next = p.NextLink
+	}
+	return nil
 }
 
 func (c *Client) ListFolder(ctx context.Context, folderID string, max int) ([]mail.Message, error) {
