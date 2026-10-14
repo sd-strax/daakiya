@@ -76,12 +76,19 @@ gate anything.
 
 ## Phase 1: MVP for the owner, shadow mode
 
-**Status 2026-10-13: implemented, not yet run against the live mailbox.** Everything in the
-scope list below exists and has unit tests for the pure stages (normalise, rules, decide,
-LLM parsing, store) and fake-server tests for the Graph and OpenAI-compatible adapters.
-The `promote`/`demote`, `undo`, `allow`/`deny`, feedback scan and `backfill` pieces from
-phase 2 were small enough to land at the same time. The first live exercise is the owner
-running `daakiya init`.
+**Status 2026-10-13: done; the gate was passed on the same day with a shortcut.** Everything
+in the scope list below exists and has unit tests for the pure stages (normalise, rules,
+decide, LLM parsing, store) and fake-server tests for the Graph and OpenAI-compatible
+adapters. The `promote`/`demote`, `undo`, `allow`/`deny`, feedback scan and `backfill`
+pieces from phase 2 were small enough to land at the same time.
+
+Instead of two weeks of shadow running, the owner backfilled one month (566 messages,
+$0.06) in shadow, graded the LLM decisions with `review --judge` (Opus 5.5 agreed on 354,
+disagreed on 21, nearly all LinkedIn marketing-versus-notification), hand-marked the
+disagreements, and ran `eval` on 372 reviewed decisions: `cold_outreach` precision 1.0 and
+recall 0.93 at threshold 0.85. That cleared the precision bar, so the owner promoted to
+live the same day. The two-week shadow period remains the recommendation for anyone who
+is not willing to grade a few hundred decisions up front.
 
 Scope:
 
@@ -103,6 +110,17 @@ the reviewed decisions through the local model(s) from spike 2, and the owner pi
 default model and threshold from numbers.
 
 ## Phase 2: Live mode and the feedback loop
+
+**Status 2026-10-14: live, in the four-week gate.** On 2026-10-13 the owner ran
+`backfill --since 2000-01-01 --apply` over the whole inbox of 10,046 messages. It finished
+in about four hours with no errors: 5,482 decisions by rules (3,057 LinkedIn routed, 1,265
+known correspondents, 961 automated senders, 269 allowlisted), 4,256 by the model, 6,769
+messages moved (3,651 to Marketing, 3,057 to LinkedIn, 432 to Cold Outreach), $0.59 of
+Haiku. The inbox went from 10,046 to 3,167 messages. The run also showed that a full-inbox
+listing takes a long time to start: the first implementation collected every page before
+classifying anything, which looked hung, so `backfill` now streams page by page with a
+progress line. The scheduled run keeps going every five minutes alongside it, serialised
+by the run lock.
 
 Scope:
 

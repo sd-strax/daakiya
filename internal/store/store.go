@@ -529,6 +529,13 @@ func (s *Store) CountLLMCallsSince(ctx context.Context, since time.Time) (int, e
 	return n, err
 }
 
+// CountUnreviewed returns the number of LLM decisions nobody has marked yet.
+func (s *Store) CountUnreviewed(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM decisions WHERE stage='llm' AND reviewed_label IS NULL`).Scan(&n)
+	return n, err
+}
+
 func (s *Store) CostSince(ctx context.Context, since time.Time) (float64, error) {
 	var c sql.NullFloat64
 	err := s.db.QueryRowContext(ctx, `SELECT SUM(cost_usd) FROM decisions WHERE decided_at >= ?`, ts(since)).Scan(&c)

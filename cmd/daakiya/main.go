@@ -530,17 +530,18 @@ func (a *app) cmdStatus(ctx context.Context) error {
 	} else {
 		fmt.Fprintf(w, "last run\tnever\n")
 	}
-	day := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	counts, _ := a.st.Counts(ctx, day)
 	calls, _ := a.st.CountLLMCallsSince(ctx, day)
 	cost, _ := a.st.CostSince(ctx, day)
 	fmt.Fprintf(w, "today\t%d llm calls, $%.4f, categories %v\n", calls, cost, counts)
-	week := time.Now().Add(-7 * 24 * time.Hour)
+	week := now.Add(-7 * 24 * time.Hour)
 	counts, _ = a.st.Counts(ctx, week)
 	cost, _ = a.st.CostSince(ctx, week)
 	fmt.Fprintf(w, "7 days\t$%.4f, categories %v\n", cost, counts)
-	unrev, _ := a.st.ListDecisions(ctx, store.DecisionFilter{Unreviewed: true, Limit: 1000})
-	fmt.Fprintf(w, "unreviewed\t%d llm decisions (`daakiya review --mark`)\n", len(unrev))
+	unrev, _ := a.st.CountUnreviewed(ctx)
+	fmt.Fprintf(w, "unreviewed\t%d llm decisions (`daakiya review --mark`)\n", unrev)
 	return nil
 }
 
