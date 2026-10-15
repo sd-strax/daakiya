@@ -336,6 +336,19 @@ func Thresholds(cfg config.Config) classify.Thresholds {
 	return classify.Thresholds{Move: cfg.LLM.Threshold, FamiliarDomain: cfg.LLM.FamiliarDomainThreshold}
 }
 
+// Allowlisted reports whether the sender's address or domain is on an allow list,
+// which the rule stage would turn into correspondence before any model call.
+func Allowlisted(ctx context.Context, st *store.Store, addr, domain string) bool {
+	if ok, _ := st.InList(ctx, store.ListAllowAddr, addr); ok {
+		return true
+	}
+	if domain == "" {
+		return false
+	}
+	ok, _ := st.InList(ctx, store.ListAllowDomain, domain)
+	return ok
+}
+
 // Familiarity looks the sender up in the correspondent and familiar-domain lists.
 func Familiarity(ctx context.Context, st *store.Store, addr, domain string) classify.Familiarity {
 	var f classify.Familiarity

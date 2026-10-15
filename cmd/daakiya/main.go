@@ -868,6 +868,9 @@ func (a *app) cmdApplyPending(ctx context.Context, args []string) error {
 	byFolder := map[string]int{}
 	for _, d := range rows {
 		fam := runner.Familiarity(ctx, a.st, d.FromAddr, d.FromDomain)
+		if runner.Allowlisted(ctx, a.st, d.FromAddr, d.FromDomain) {
+			fam.Address = true // allowlisted since the decision was recorded
+		}
 		var action, folder string
 		switch {
 		case d.Rule == actions.RuleRoute:
@@ -902,6 +905,7 @@ func (a *app) cmdApplyPending(ctx context.Context, args []string) error {
 			return err
 		}
 		moved++
+		fmt.Fprintf(a.out, "moved       %-14s %-32s %s -> %s\n", d.Category, truncateStr(d.FromAddr, 32), truncateStr(d.Subject, 40), folder)
 	}
 	if *dry {
 		fmt.Fprintf(a.out, "would move %v, skipped %d\n", byFolder, skipped)

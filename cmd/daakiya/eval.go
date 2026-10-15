@@ -63,6 +63,9 @@ func (a *app) cmdEval(ctx context.Context, args []string) error {
 			continue // marked wrong without saying what it was: unusable for scoring
 		}
 		fam := runner.Familiarity(ctx, a.st, d.FromAddr, d.FromDomain)
+		if runner.Allowlisted(ctx, a.st, d.FromAddr, d.FromDomain) {
+			fam.Address = true // the rule stage would settle this sender before the model
+		}
 		r := evalRow{ID: d.ID, Label: label, Category: d.Category, Conf: d.Confidence, Rel: d.Relationship, Fam: fam, Tokens: d.InputTokens + d.OutputTokens, Cost: d.CostUSD, Latency: d.LatencyMS}
 		if replay {
 			var sig llm.Signals
@@ -212,6 +215,7 @@ func printReport(w io.Writer, rep report, cl llm.Classifier) {
 	fmt.Fprintf(w, "\ntokens %d, est. cost $%.4f, latency p50 %dms p95 %dms\n", rep.Tokens, rep.Cost, rep.LatencyP50, rep.LatencyP95)
 	if len(rep.Sources) > 0 {
 		fmt.Fprintf(w, "labels by source: %v (judge-agreed labels are not ground truth; disagreements were graded by you)\n", rep.Sources)
+		fmt.Fprintln(w, "senders on your allow lists count as never moved, as the rule stage would settle them first")
 	}
 }
 
