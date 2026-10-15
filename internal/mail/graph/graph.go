@@ -91,8 +91,17 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 			}
 			return err
 		}
-		data, _ := io.ReadAll(resp.Body)
+		data, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		if readErr != nil {
+			// A truncated body is a transport failure, not a malformed reply.
+			if attempt < 4 {
+				sleep(ctx, backoff)
+				backoff *= 2
+				continue
+			}
+			return fmt.Errorf("graph: reading response for %s: %w", method+" "+shortPath(u), readErr)
+		}
 		switch {
 		case resp.StatusCode == 429 || resp.StatusCode >= 500:
 			wait := backoff

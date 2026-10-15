@@ -7,7 +7,7 @@ import (
 
 // PromptVersion changes whenever SystemPrompt, the taxonomy text, or the input or
 // example rendering changes. It is recorded on every decision.
-const PromptVersion = "2026-10-13.1"
+const PromptVersion = "2026-10-14.1"
 
 const taxonomy = `Categories:
 

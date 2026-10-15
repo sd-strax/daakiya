@@ -57,15 +57,18 @@ type Mailbox struct {
 }
 
 type LLM struct {
-	Provider       string  `toml:"provider"`
-	Model          string  `toml:"model"`
-	BaseURL        string  `toml:"base_url"`
-	Threshold      float64 `toml:"threshold"`
-	MaxBodyChars   int     `toml:"max_body_chars"`
-	MaxCallsPerDay int     `toml:"max_calls_per_day"`
-	Concurrency    int     `toml:"concurrency"`
-	JSONMode       bool    `toml:"json_mode"`
-	MaxExamples    int     `toml:"max_examples"`
+	Provider  string  `toml:"provider"`
+	Model     string  `toml:"model"`
+	BaseURL   string  `toml:"base_url"`
+	Threshold float64 `toml:"threshold"`
+	// FamiliarDomainThreshold applies instead of Threshold when the sender is a
+	// stranger at a domain you have written to. Zero means same as Threshold.
+	FamiliarDomainThreshold float64 `toml:"familiar_domain_threshold"`
+	MaxBodyChars            int     `toml:"max_body_chars"`
+	MaxCallsPerDay          int     `toml:"max_calls_per_day"`
+	Concurrency             int     `toml:"concurrency"`
+	JSONMode                bool    `toml:"json_mode"`
+	MaxExamples             int     `toml:"max_examples"`
 	// Prices are USD per million tokens, used only for the local cost estimate.
 	InputPricePerM  float64 `toml:"input_price_per_m"`
 	OutputPricePerM float64 `toml:"output_price_per_m"`
@@ -103,16 +106,17 @@ func Default() Config {
 			CorrespondentMonths: 24,
 		},
 		LLM: LLM{
-			Provider:        ProviderAnthropic,
-			Model:           "claude-haiku-5-5",
-			Threshold:       0.85,
-			MaxBodyChars:    1500,
-			MaxCallsPerDay:  500,
-			Concurrency:     4,
-			JSONMode:        true,
-			MaxExamples:     12,
-			InputPricePerM:  0.10,
-			OutputPricePerM: 0.50,
+			Provider:                ProviderAnthropic,
+			Model:                   "claude-haiku-5-5",
+			Threshold:               0.85,
+			FamiliarDomainThreshold: 0.95,
+			MaxBodyChars:            1500,
+			MaxCallsPerDay:          500,
+			Concurrency:             4,
+			JSONMode:                true,
+			MaxExamples:             12,
+			InputPricePerM:          0.10,
+			OutputPricePerM:         0.50,
 		},
 		Shadow:  Shadow{Tag: true},
 		Folders: map[string]string{"cold_outreach": "Cold Outreach"},
@@ -222,6 +226,9 @@ func (c Config) Validate() error {
 	}
 	if c.LLM.Threshold <= 0 || c.LLM.Threshold > 1 {
 		return errors.New("llm.threshold must be in (0, 1]")
+	}
+	if c.LLM.FamiliarDomainThreshold < 0 || c.LLM.FamiliarDomainThreshold > 1 {
+		return errors.New("llm.familiar_domain_threshold must be in [0, 1]")
 	}
 	for cat := range c.Folders {
 		switch cat {

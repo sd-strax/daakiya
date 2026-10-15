@@ -47,6 +47,7 @@ type Signals struct {
 	AutoSubmitted   bool   `json:"auto_submitted"`
 	InReplyTo       bool   `json:"in_reply_to"`
 	ToOwnerDirectly bool   `json:"to_owner_directly"`
+	FamiliarDomain  bool   `json:"familiar_domain,omitempty"`
 	Links           int    `json:"links"`
 	CalendarLink    bool   `json:"calendar_link"`
 	Mailer          string `json:"mailer,omitempty"`
@@ -167,7 +168,11 @@ func RenderInput(in Input) string {
 	if in.KnownToOwner {
 		known = "yes"
 	}
-	fmt.Fprintf(&b, "From: %s <%s>   (domain: %s; known to you: %s)\n", in.FromName, in.FromAddr, in.FromDomain, known)
+	fmt.Fprintf(&b, "From: %s <%s>   (domain: %s; known to you: %s", in.FromName, in.FromAddr, in.FromDomain, known)
+	if in.Signals.FamiliarDomain && !in.KnownToOwner {
+		b.WriteString("; you have written to other people at this domain")
+	}
+	b.WriteString(")\n")
 	if in.ReplyTo != "" && !strings.EqualFold(in.ReplyTo, in.FromAddr) {
 		fmt.Fprintf(&b, "Reply-To: %s\n", in.ReplyTo)
 	}

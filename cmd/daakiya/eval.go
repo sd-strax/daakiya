@@ -12,6 +12,7 @@ import (
 
 	"github.com/sd-strax/daakiya/internal/classify"
 	"github.com/sd-strax/daakiya/internal/llm"
+	"github.com/sd-strax/daakiya/internal/runner"
 	"github.com/sd-strax/daakiya/internal/store"
 )
 
@@ -21,7 +22,7 @@ type evalRow struct {
 	Category string
 	Conf     float64
 	Rel      string
-	Known    bool
+	Fam      classify.Familiarity
 	Tokens   int64
 	Cost     float64
 	Latency  int64
@@ -61,12 +62,13 @@ func (a *app) cmdEval(ctx context.Context, args []string) error {
 		if label == "wrong" {
 			continue // marked wrong without saying what it was: unusable for scoring
 		}
-		known, _ := a.st.InList(ctx, store.ListCorrespondent, d.FromAddr)
-		r := evalRow{ID: d.ID, Label: label, Category: d.Category, Conf: d.Confidence, Rel: d.Relationship, Known: known, Tokens: d.InputTokens + d.OutputTokens, Cost: d.CostUSD, Latency: d.LatencyMS}
+		fam := runner.Familiarity(ctx, a.st, d.FromAddr, d.FromDomain)
+		r := evalRow{ID: d.ID, Label: label, Category: d.Category, Conf: d.Confidence, Rel: d.Relationship, Fam: fam, Tokens: d.InputTokens + d.OutputTokens, Cost: d.CostUSD, Latency: d.LatencyMS}
 		if replay {
 			var sig llm.Signals
 			_ = json.Unmarshal([]byte(d.Signals), &sig)
-			in := llm.Input{FromName: d.FromName, FromAddr: d.FromAddr, FromDomain: d.FromDomain, KnownToOwner: known, Subject: d.Subject, Signals: sig, Body: d.Excerpt}
+			sig.FamiliarDomain = fam.Domain
+			in := llm.Input{FromName: d.FromName, FromAddr: d.FromAddr, FromDomain: d.FromDomain, KnownToOwner: fam.Address, Subject: d.Subject, Signals: sig, Body: d.Excerpt}
 			start := time.Now()
 			res, usage, err := cl.Classify(ctx, llm.SystemPrompt(a.cfg.Owner.Profile), llm.SeedExamples, in)
 			r.Latency = time.Since(start).Milliseconds()
@@ -84,7 +86,7 @@ func (a *app) cmdEval(ctx context.Context, args []string) error {
 	if replay {
 		fmt.Fprintln(a.out)
 	}
-	rep := score(ev, a.cfg.LLM.Threshold)
+	rep := score(ev, runner.Thresholds(a.cfg))
 	rep.Sources, _ = a.st.ReviewedSources(ctx)
 	if *asJSON {
 		enc := json.NewEncoder(a.out)
@@ -119,7 +121,7 @@ type report struct {
 	Sources    map[string]int
 }
 
-func score(ev []evalRow, threshold float64) report {
+func score(ev []evalRow, th classify.Thresholds) report {
 	rep := report{Rows: len(ev)}
 	cats := map[string]*catScore{}
 	for _, c := range llm.Categories {
@@ -152,10 +154,11 @@ func score(ev []evalRow, threshold float64) report {
 		cs.Recall = ratio(cs.TP, cs.TP+cs.FN)
 		rep.Categories = append(rep.Categories, *cs)
 	}
-	for _, t := range []float64{0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, threshold} {
+	for _, t := range []float64{0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, th.Move} {
 		ts := thresholdScore{Threshold: t}
 		for _, r := range ev {
-			act, _ := classify.Decide(llm.Result{Category: r.Category, Confidence: r.Conf, Relationship: r.Rel}, t, r.Known, map[string]string{llm.ColdOutreach: "x"})
+			// The familiar-domain floor stays as configured while the base threshold sweeps.
+			act, _ := classify.Decide(llm.Result{Category: r.Category, Confidence: r.Conf, Relationship: r.Rel}, classify.Thresholds{Move: t, FamiliarDomain: th.FamiliarDomain}, r.Fam, map[string]string{llm.ColdOutreach: "x"})
 			move := act == store.ActionMove
 			truth := r.Label == llm.ColdOutreach
 			switch {

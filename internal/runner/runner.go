@@ -131,11 +131,24 @@ func (r *Runner) Run(ctx context.Context) (store.RunSummary, error) {
 	// Retry deferred decisions from earlier runs.
 	deferred, _ := r.Store.ListDecisions(ctx, store.DecisionFilter{OnlyAction: store.ActionDeferred, Limit: 50})
 	var batch []mail.Message
+	var draggedBack int
 	for _, m := range delta.New {
 		if m.IsDraft {
 			continue
 		}
-		if done, _ := r.Store.HasDecision(ctx, m.ID); done {
+		prev, found, _ := r.Store.GetDecision(ctx, m.ID)
+		if found && prev.Action == store.ActionMove && prev.ActionAt != nil && prev.Corrected == "" && prev.Rule != actions.RuleRoute {
+			// We moved it out and it is back in the Inbox: a correction, free of charge.
+			if err := r.applier().RecordFalsePositive(ctx, prev); err != nil {
+				r.Log("feedback: recording drag-back of %s: %v", prev.FromAddr, err)
+				sum.Errors++
+			} else {
+				draggedBack++
+				r.Log("feedback: false positive, %s dragged back to the Inbox", prev.FromAddr)
+			}
+			continue
+		}
+		if found && prev.Action != store.ActionDeferred {
 			continue
 		}
 		batch = append(batch, m)
@@ -156,15 +169,34 @@ func (r *Runner) Run(ctx context.Context) (store.RunSummary, error) {
 		return sum, err
 	}
 
-	fb := &feedback.Scanner{Applier: r.applier(), Log: r.Log}
-	if fp, fn, err := fb.Scan(ctx); err != nil {
-		r.Log("feedback scan failed: %v", err)
-		sum.Errors++
-	} else if fp+fn > 0 {
+	fp := draggedBack
+	var fn int
+	if r.feedbackDue(ctx) {
+		fb := &feedback.Scanner{Applier: r.applier(), Log: r.Log}
+		sfp, sfn, err := fb.Scan(ctx)
+		if err != nil {
+			r.Log("feedback scan failed: %v", err)
+			sum.Errors++
+		} else {
+			fp, fn = fp+sfp, sfn
+			_ = r.Store.SetState(ctx, store.KeyFeedbackAt, time.Now().UTC().Format(time.RFC3339))
+		}
+	}
+	if fp+fn > 0 {
 		sum.Note = fmt.Sprintf("feedback: %d fp, %d fn", fp, fn)
 	}
 	_ = r.Store.PruneExamples(ctx, 200)
 	return sum, nil
+}
+
+// feedbackDue rate-limits the folder scan to once an hour.
+func (r *Runner) feedbackDue(ctx context.Context) bool {
+	last, _ := r.Store.GetState(ctx, store.KeyFeedbackAt)
+	if last == "" {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339, last)
+	return err != nil || time.Since(t) >= time.Hour
 }
 
 func (r *Runner) applier() *actions.Applier {
@@ -276,10 +308,10 @@ func (r *Runner) classifyOne(ctx context.Context, m mail.Message) (store.Decisio
 		d.Attempts++
 		return d, ErrBudget
 	}
-	known, _ := r.Store.InList(ctx, store.ListCorrespondent, n.FromAddr)
+	fam := Familiarity(ctx, r.Store, n.FromAddr, n.FromDomain)
 	examples := r.examples(ctx)
 	start := time.Now()
-	res, usage, err := r.Classifier.Classify(ctx, llm.SystemPrompt(r.Cfg.Owner.Profile), examples, classify.ToInput(n, known))
+	res, usage, err := r.Classifier.Classify(ctx, llm.SystemPrompt(r.Cfg.Owner.Profile), examples, classify.ToInput(n, fam))
 	d.LatencyMS = time.Since(start).Milliseconds()
 	d.Provider, d.Model, d.Stage = r.Classifier.Name(), r.Classifier.Model(), "llm"
 	d.InputTokens, d.OutputTokens = usage.InputTokens, usage.OutputTokens
@@ -295,8 +327,23 @@ func (r *Runner) classifyOne(ctx context.Context, m mail.Message) (store.Decisio
 		return d, err
 	}
 	d.Category, d.Confidence, d.Reason, d.Relationship = res.Category, res.Confidence, res.Reason, res.Relationship
-	d.Action, d.TargetFolder = classify.Decide(res, r.Cfg.LLM.Threshold, known, r.Cfg.Folders)
+	d.Action, d.TargetFolder = classify.Decide(res, Thresholds(r.Cfg), fam, r.Cfg.Folders)
 	return d, nil
+}
+
+// Thresholds reads the move thresholds from config.
+func Thresholds(cfg config.Config) classify.Thresholds {
+	return classify.Thresholds{Move: cfg.LLM.Threshold, FamiliarDomain: cfg.LLM.FamiliarDomainThreshold}
+}
+
+// Familiarity looks the sender up in the correspondent and familiar-domain lists.
+func Familiarity(ctx context.Context, st *store.Store, addr, domain string) classify.Familiarity {
+	var f classify.Familiarity
+	f.Address, _ = st.InList(ctx, store.ListCorrespondent, addr)
+	if domain != "" {
+		f.Domain, _ = st.InList(ctx, store.ListFamiliarDomain, classify.RegistrableDomain(domain))
+	}
+	return f
 }
 
 func (r *Runner) examples(ctx context.Context) []llm.Example {
@@ -334,7 +381,11 @@ func (r *Runner) refreshCorrespondents(ctx context.Context, force bool) error {
 	if err := r.Store.ReplaceList(ctx, store.ListSentConversation, "sent_items", convs); err != nil {
 		return err
 	}
-	r.Log("correspondents: %d addresses, %d conversations", len(addrs), len(convs))
+	domains := classify.FamiliarDomains(addrs)
+	if err := r.Store.ReplaceList(ctx, store.ListFamiliarDomain, "sent_items", domains); err != nil {
+		return err
+	}
+	r.Log("correspondents: %d addresses, %d conversations, %d familiar domains", len(addrs), len(convs), len(domains))
 	return r.Store.SetState(ctx, store.KeyCorrespondentsAt, time.Now().UTC().Format(time.RFC3339))
 }
 

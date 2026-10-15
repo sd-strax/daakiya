@@ -166,6 +166,45 @@ var secondLevel = map[string]bool{
 	"co.uk": true, "org.uk": true, "ac.uk": true, "gov.uk": true, "com.au": true, "net.au": true, "org.au": true,
 	"co.in": true, "co.jp": true, "co.nz": true, "com.br": true, "com.sg": true, "com.mx": true, "co.za": true,
 	"com.hk": true, "com.tw": true, "co.kr": true, "com.cn": true, "com.ar": true, "co.il": true,
+	"ac.in": true, "edu.in": true, "gov.in": true, "org.in": true, "net.in": true, "res.in": true, "firm.in": true,
+	"co.th": true, "ac.th": true, "or.th": true, "co.id": true, "com.my": true, "com.ph": true,
+	"com.vn": true, "com.pk": true, "com.sa": true, "com.ng": true, "co.ke": true, "edu.au": true, "com.tr": true,
+}
+
+// publicMailDomains are providers where sharing a domain says nothing about a
+// relationship. They never become familiar domains.
+var publicMailDomains = map[string]bool{
+	"gmail.com": true, "googlemail.com": true, "outlook.com": true, "hotmail.com": true, "live.com": true,
+	"msn.com": true, "yahoo.com": true, "yahoo.co.in": true, "yahoo.co.uk": true, "ymail.com": true,
+	"icloud.com": true, "me.com": true, "mac.com": true, "aol.com": true, "protonmail.com": true,
+	"proton.me": true, "pm.me": true, "gmx.com": true, "gmx.de": true, "mail.com": true, "zoho.com": true,
+	"rediffmail.com": true, "fastmail.com": true, "hey.com": true, "yandex.com": true, "qq.com": true,
+}
+
+// IsPublicMailDomain reports whether a registrable domain belongs to a public
+// mail provider.
+func IsPublicMailDomain(domain string) bool {
+	return publicMailDomains[strings.ToLower(domain)]
+}
+
+// FamiliarDomains reduces a list of correspondent addresses to the set of
+// registrable domains worth trusting a little: public providers are dropped.
+func FamiliarDomains(addrs []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range addrs {
+		i := strings.LastIndex(a, "@")
+		if i < 0 {
+			continue
+		}
+		d := RegistrableDomain(a[i+1:])
+		if d == "" || IsPublicMailDomain(d) || seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	return out
 }
 
 // RegistrableDomain reduces a hostname to its registrable part with a small
@@ -184,9 +223,11 @@ func RegistrableDomain(host string) string {
 }
 
 // ToInput converts a normalized message into the LLM input.
-func ToInput(n Normalized, known bool) llm.Input {
+func ToInput(n Normalized, fam Familiarity) llm.Input {
+	sig := n.Signals
+	sig.FamiliarDomain = fam.Domain
 	return llm.Input{
-		FromName: n.FromName, FromAddr: n.FromAddr, FromDomain: n.FromDomain, KnownToOwner: known,
-		ReplyTo: n.ReplyTo, Subject: n.Subject, Signals: n.Signals, Body: n.Body,
+		FromName: n.FromName, FromAddr: n.FromAddr, FromDomain: n.FromDomain, KnownToOwner: fam.Address,
+		ReplyTo: n.ReplyTo, Subject: n.Subject, Signals: sig, Body: n.Body,
 	}
 }

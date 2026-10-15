@@ -87,6 +87,7 @@ mode = "shadow"                # or "live"; promote/demote switch it
 provider = "anthropic"         # or "openai-compatible" for Ollama and friends
 model = "claude-haiku-5-5"
 threshold = 0.85               # minimum confidence before anything is moved
+familiar_domain_threshold = 0.95   # stricter floor for strangers at domains you have written to
 
 [folders]                      # which labels get moved, and where (under the Daakiya folder)
 cold_outreach = "Cold Outreach"

@@ -867,7 +867,7 @@ func (a *app) cmdApplyPending(ctx context.Context, args []string) error {
 	var moved, skipped, failed int
 	byFolder := map[string]int{}
 	for _, d := range rows {
-		known, _ := a.st.InList(ctx, store.ListCorrespondent, d.FromAddr)
+		fam := runner.Familiarity(ctx, a.st, d.FromAddr, d.FromDomain)
 		var action, folder string
 		switch {
 		case d.Rule == actions.RuleRoute:
@@ -875,7 +875,7 @@ func (a *app) cmdApplyPending(ctx context.Context, args []string) error {
 		case d.Stage == "rule" && d.Category == llm.ColdOutreach:
 			action, folder = store.ActionMove, a.cfg.Folders[llm.ColdOutreach]
 		default:
-			action, folder = classify.Decide(llm.Result{Category: d.Category, Confidence: d.Confidence, Relationship: d.Relationship}, a.cfg.LLM.Threshold, known, a.cfg.Folders)
+			action, folder = classify.Decide(llm.Result{Category: d.Category, Confidence: d.Confidence, Relationship: d.Relationship}, runner.Thresholds(a.cfg), fam, a.cfg.Folders)
 		}
 		if action != store.ActionMove || folder == "" {
 			skipped++

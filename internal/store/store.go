@@ -79,6 +79,10 @@ const (
 	ListDenyDomain       = "deny_domain"
 	ListCorrespondent    = "correspondent"
 	ListSentConversation = "sent_conversation"
+	// ListFamiliarDomain holds the registrable domains of known correspondents,
+	// minus public mail providers. A stranger at a familiar domain is held to a
+	// higher threshold before being moved.
+	ListFamiliarDomain = "familiar_domain"
 )
 
 // Sync state keys.
@@ -89,6 +93,7 @@ const (
 	KeyInboxID          = "inbox_id"
 	KeyCorrespondentsAt = "correspondents_refreshed_at"
 	KeyLastRunAt        = "last_run_at"
+	KeyFeedbackAt       = "feedback_scanned_at"
 	KeyLastRunNote      = "last_run_note"
 	KeyAccountUPN       = "account_upn"
 	KeyImmutableIDs     = "immutable_ids"
@@ -397,6 +402,8 @@ type DecisionFilter struct {
 	Reviewed     bool
 	Uncorrected  bool
 	Category     string
+	// ActedSince keeps only decisions whose action was applied at or after this time.
+	ActedSince time.Time
 }
 
 func (s *Store) ListDecisions(ctx context.Context, f DecisionFilter) ([]Decision, error) {
@@ -425,6 +432,10 @@ func (s *Store) ListDecisions(ctx context.Context, f DecisionFilter) ([]Decision
 	if f.Category != "" {
 		q += ` AND category = ?`
 		args = append(args, f.Category)
+	}
+	if !f.ActedSince.IsZero() {
+		q += ` AND action_at >= ?`
+		args = append(args, ts(f.ActedSince))
 	}
 	q += ` ORDER BY decided_at DESC`
 	if f.Limit > 0 {

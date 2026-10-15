@@ -157,9 +157,12 @@ cached on providers that support prompt caching.
 
 ```
 folder = folders[category]              (config; only cold_outreach has one by default)
+floor  = threshold                      (default 0.85)
+if sender's domain is a familiar domain  (you have written to someone else there)
+   floor = max(floor, familiar_domain_threshold)   (default 0.95)
 if folder is set
-   and confidence >= threshold            (default 0.85)
    and sender not in correspondent list
+   and confidence >= floor
    and not (category == cold_outreach and relationship_evidence == strong)
 then action = move to folder + tag
 else action = none, category recorded as returned
@@ -168,6 +171,15 @@ else action = none, category recorded as returned
 The threshold is per provider/model in config, because a 4B local model's confidence
 is not calibrated like a hosted model's. The eval command prints a precision/recall
 curve over thresholds so you can choose.
+
+The familiar-domain floor exists because the two confidence bands behave differently. A
+stranger at a domain you have never written to is almost always what the model says it
+is, even at 0.80. A stranger at a vendor or customer domain you already deal with is where
+the model's 0.80 means "not sure", and a wrong move there costs a real conversation. The
+familiar-domain list is derived from the correspondent list at each refresh: the
+registrable domain of every address you have written to, minus public mail providers
+(gmail.com, outlook.com and the like), where sharing a domain says nothing. The flag is
+also passed to the model as a signal ("you have written to other people at this domain").
 
 ### Stage 5: Record and act
 
@@ -182,8 +194,9 @@ Corrections come from your ordinary behaviour, not from a separate UI:
 
 | You do | Detected how | Effect |
 |--------|--------------|--------|
-| Moves a message from `Daakiya/Cold Outreach` back to Inbox (or anywhere else) | Feedback scan: `Locate(id)` returns a folder other than the Daakiya folder for a decision with `action=move` | Decision marked `corrected=fp`. Sender address added to `allow_addr`. Message added to `examples` as `correspondence`. If the same domain gets 2 FP corrections, domain added to `allow_domain`. |
-| Moves a message from Inbox into `Daakiya/Cold Outreach` | Feedback scan: a message in the Daakiya folder with no `action=move` decision | Decision (if any) marked `corrected=fn`. Added to `examples` as `cold_outreach`. Domain counted toward denylist promotion. |
+| Drag a message Daakiya moved back to the Inbox | The Inbox delta on the next run lists it, and its recorded decision says `action=move`. No extra Graph call. | Decision marked `corrected=fp`. Sender address added to `allow_addr`. Message added to `examples` as `correspondence`. If the same domain gets 2 FP corrections, domain added to `allow_domain`. |
+| Drag a message Daakiya moved to some other folder | Hourly feedback scan: `Locate(id)` for messages moved in the last 7 days (at most 100) returns a folder other than the target | Same as above. |
+| Move a message from Inbox into `Daakiya/Cold Outreach` | Hourly feedback scan: a message in the folder with no `action=move` decision | Decision (if any) marked `corrected=fn`. Added to `examples` as `cold_outreach`. Domain counted toward denylist promotion. |
 | Runs `daakiya undo <id>` | Direct | Same as FP, plus the move back is performed by the tool. |
 | Runs `daakiya allow <domain|addr>` / `daakiya deny ...` | Direct | List updated, reason recorded. |
 

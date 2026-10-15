@@ -18,14 +18,18 @@ type Scanner struct {
 	Log     func(format string, args ...any)
 }
 
-// Scan looks for two things: model-moved messages that are no longer in their
-// target folder (false positives) and messages in the cold outreach folder that
-// Daakiya never moved (false negatives the owner filed by hand). Route moves are
-// the owner's own rules and produce no signal.
+// Scan looks for two things: recently moved messages that are no longer in their
+// target folder (false positives dragged somewhere other than the Inbox; a drag
+// back to the Inbox is caught for free by the Inbox delta in the runner) and
+// messages in the cold outreach folder that Daakiya never moved (false negatives
+// filed by hand). Route moves are the user's own rules and produce no signal.
+//
+// Each located message is one Graph call, so the window is short and capped;
+// the runner calls Scan at most once an hour.
 func (s *Scanner) Scan(ctx context.Context) (fp, fn int, err error) {
 	a := s.Applier
-	since := time.Now().Add(-30 * 24 * time.Hour)
-	moved, err := a.Store.ListDecisions(ctx, store.DecisionFilter{OnlyAction: store.ActionMove, Since: since, Uncorrected: true, Limit: 500})
+	since := time.Now().Add(-7 * 24 * time.Hour)
+	moved, err := a.Store.ListDecisions(ctx, store.DecisionFilter{OnlyAction: store.ActionMove, ActedSince: since, Uncorrected: true, Limit: 100})
 	if err != nil {
 		return 0, 0, err
 	}
